@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_vault_card"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="8dp">
+
+    <CheckBox
+        android:id="@+id/cbStreamSelect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:buttonTint="#00E5FF"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="6dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvStreamQuality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#00E5FF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvStreamInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#BB9AF7"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvStreamUrlPreview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="middle"
+            android:singleLine="true"
+            android:textColor="#68749C"
+            android:textSize="10sp" />
+    </LinearLayout>
+</LinearLayout>
+<!-- END OF FILE -->
