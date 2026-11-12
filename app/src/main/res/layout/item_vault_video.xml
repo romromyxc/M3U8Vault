@@ -6,14 +6,53 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/bg_vault_card"
-    android:padding="12dp">
+    android:padding="10dp">
 
+    <!-- Left Video Thumbnail Card with Status Checkmark Badge -->
+    <FrameLayout
+        android:layout_width="76dp"
+        android:layout_height="54dp"
+        android:background="@drawable/bg_thumb_box">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="▶"
+            android:textColor="#00E5FF"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tvThumbBadge"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="top|start"
+            android:layout_margin="4dp"
+            android:background="@drawable/bg_nav_pill"
+            android:gravity="center"
+            android:text="✔"
+            android:textColor="#00FF9C"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="4dp"
+            android:text="HLS"
+            android:textColor="#8A96C2"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <!-- Middle Title, Progress Bar & Speed / Remaining Time -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:paddingEnd="8dp">
+        android:layout_marginStart="10dp"
+        android:orientation="vertical">
 
         <TextView
             android:id="@+id/tvVideoTitle"
@@ -22,42 +61,48 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="#F0F4FF"
-            android:textSize="15sp"
+            android:textSize="14sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/tvVideoMeta"
+        <ProgressBar
+            android:id="@+id/pbItemProgress"
+            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:textColor="#7A86B6"
-            android:textSize="11sp" />
+            android:layout_height="4dp"
+            android:layout_marginTop="6dp"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/progress_neon" />
 
         <TextView
             android:id="@+id/tvVideoStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textColor="#00E5FF"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- Right 3-Dots Action Menu -->
     <Button
-        android:id="@+id/btnRowAction"
-        android:layout_width="wrap_content"
-        android:layout_height="34dp"
-        android:minWidth="74dp"
-        android:paddingHorizontal="10dp"
+        android:id="@+id/btnRowMore"
+        android:layout_width="34dp"
+        android:layout_height="38dp"
+        android:layout_marginStart="4dp"
+        android:minWidth="0dp"
+        android:padding="0dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
-        android:background="@drawable/bg_btn_neon_pink"
+        android:background="@android:color/transparent"
         app:backgroundTint="@null"
         android:focusable="false"
         android:focusableInTouchMode="false"
-        android:text="Pause"
-        android:textColor="#FF6EB4"
-        android:textSize="11sp"
+        android:text="⋮"
+        android:textColor="#9AA6D1"
+        android:textSize="18sp"
         android:textStyle="bold" />
 </LinearLayout>
 <!-- END OF FILE -->
