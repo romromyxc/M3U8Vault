@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -12,6 +13,8 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.offline.DefaultDownloaderFactory
+import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -19,6 +22,7 @@ import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.PlatformScheduler
 import okhttp3.OkHttpClient
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
@@ -31,6 +35,8 @@ data class StreamHeaders(
 @OptIn(UnstableApi::class)
 object VaultEngine {
     const val CHANNEL_ID = "vault_downloads"
+    const val STOP_REASON_PAUSED = 1
+
     private var databaseProvider: StandaloneDatabaseProvider? = null
     private var privateCache: SimpleCache? = null
     private var downloadManager: DownloadManager? = null
@@ -92,15 +98,21 @@ object VaultEngine {
 
     @Synchronized
     fun getDownloadManager(context: Context): DownloadManager {
-        return downloadManager ?: DownloadManager(
-            context.applicationContext,
-            getDatabase(context),
-            getPrivateCache(context),
-            buildUpstreamFactory(),
-            Executors.newFixedThreadPool(6)
-        ).apply {
-            maxParallelDownloads = 3
-            downloadManager = this
+        return downloadManager ?: run {
+            val writeFactory = CacheDataSource.Factory()
+                .setCache(getPrivateCache(context))
+                .setUpstreamDataSourceFactory(buildUpstreamFactory())
+            val segmentPool = Executors.newFixedThreadPool(6)
+            val downloaderFactory = DefaultDownloaderFactory(writeFactory, segmentPool)
+
+            DownloadManager(
+                context.applicationContext,
+                getDatabase(context),
+                downloaderFactory
+            ).apply {
+                maxParallelDownloads = 3
+                downloadManager = this
+            }
         }
     }
 
@@ -111,12 +123,26 @@ object VaultEngine {
             .setData(title.toByteArray(Charsets.UTF_8))
             .build()
 
-        DownloadService.sendAddDownload(
-            context,
-            VaultDownloadService::class.java,
-            request,
-            true
-        )
+        DownloadService.sendAddDownload(context, VaultDownloadService::class.java, request, true)
+    }
+
+    fun pauseDownload(context: Context, id: String) {
+        DownloadService.sendSetStopReason(context, VaultDownloadService::class.java, id, STOP_REASON_PAUSED, false)
+    }
+
+    fun resumeDownload(context: Context, id: String) {
+        DownloadService.sendSetStopReason(context, VaultDownloadService::class.java, id, Download.STOP_REASON_NONE, false)
+    }
+
+    fun removeDownload(context: Context, id: String) {
+        DownloadService.sendRemoveDownload(context, VaultDownloadService::class.java, id, false)
+    }
+
+    fun formatSize(bytes: Long): String = when {
+        bytes >= 1024L * 1024L * 1024L -> String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        bytes >= 1024L * 1024L -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> String.format(Locale.US, "%.0f KB", bytes / 1024.0)
+        else -> "$bytes B"
     }
 
     fun buildOfflineMediaItem(url: String, title: String): MediaItem {
@@ -124,9 +150,7 @@ object VaultEngine {
             .setUri(url)
             .setMediaId(url)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
-            .setMediaMetadata(
-                androidx.media3.common.MediaMetadata.Builder().setTitle(title).build()
-            )
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
             .build()
     }
 }
@@ -142,7 +166,7 @@ class VaultDownloadService : DownloadService(
     override fun getDownloadManager(): DownloadManager = VaultEngine.getDownloadManager(this)
     override fun getScheduler() = PlatformScheduler(this, 1)
     override fun getForegroundNotification(
-        downloads: MutableList<androidx.media3.exoplayer.offline.Download>,
+        downloads: MutableList<Download>,
         notMetRequirements: Int
     ) = DownloadNotificationHelper(this, VaultEngine.CHANNEL_ID)
         .buildProgressNotification(
@@ -154,3 +178,4 @@ class VaultDownloadService : DownloadService(
             notMetRequirements
         )
 }
+// END OF FILE
