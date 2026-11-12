@@ -3,6 +3,7 @@ package com.example.m3u8vault
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.graphics.Color
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
@@ -11,7 +12,6 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.*
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
@@ -35,22 +35,29 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     private var player: ExoPlayer? = null
     private lateinit var vaultHeaderBar: LinearLayout
+    private lateinit var tvHeaderTitle: TextView
     private lateinit var playerContainer: FrameLayout
     private lateinit var playerView: PlayerView
     private lateinit var gestureOverlay: View
     private lateinit var tvGestureHud: TextView
-    private lateinit var vaultListSection: LinearLayout
+    private lateinit var vaultListSection: FrameLayout
     private lateinit var downloadListView: ListView
     private lateinit var tvEmptyVault: TextView
-    private lateinit var btnTabQueue: Button
-    private lateinit var btnTabDone: Button
+    private lateinit var bottomNavBar: LinearLayout
+    private lateinit var iconWrapDownloading: FrameLayout
+    private lateinit var iconWrapVideos: FrameLayout
+    private lateinit var tvBadgeDownloading: TextView
+    private lateinit var tvBadgeVideos: TextView
+    private lateinit var tvLabelDownloading: TextView
+    private lateinit var tvLabelVideos: TextView
     private lateinit var btnFullscreen: Button
     private lateinit var btnSpeed: Button
     private lateinit var audioManager: AudioManager
 
     private val visibleItems = mutableListOf<Download>()
+    private var allCachedDownloads = listOf<Download>()
     private lateinit var vaultAdapter: VaultAdapter
-    private var showingQueueTab = false
+    private var showingDownloadingTab = true
     private var isFullscreen = false
     private var volumeAccum = 0f
     private var currentPlayingId: String? = null
@@ -61,26 +68,27 @@ class VaultPlayerActivity : AppCompatActivity() {
     private val hideHudRunnable = Runnable { tvGestureHud.visibility = View.GONE }
     private val refreshRunnable = object : Runnable {
         override fun run() {
-            refreshVaultLists()
+            refreshLists()
             uiHandler.postDelayed(this, 1000L)
         }
     }
 
     private val downloadListener = object : DownloadManager.Listener {
         override fun onDownloadChanged(dm: DownloadManager, download: Download, finalException: Exception?) {
-            runOnUiThread { refreshVaultLists() }
+            runOnUiThread { refreshLists() }
         }
         override fun onDownloadRemoved(dm: DownloadManager, download: Download) {
-            runOnUiThread { refreshVaultLists() }
+            runOnUiThread { refreshLists() }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // Screenshot & screen recording privacy lock intentionally disabled
         setContentView(R.layout.activity_vault_player)
 
         vaultHeaderBar = findViewById(R.id.vaultHeaderBar)
+        tvHeaderTitle = findViewById(R.id.tvHeaderTitle)
         playerContainer = findViewById(R.id.playerContainer)
         playerView = findViewById(R.id.playerView)
         gestureOverlay = findViewById(R.id.gestureOverlay)
@@ -88,49 +96,41 @@ class VaultPlayerActivity : AppCompatActivity() {
         vaultListSection = findViewById(R.id.vaultListSection)
         downloadListView = findViewById(R.id.downloadListView)
         tvEmptyVault = findViewById(R.id.tvEmptyVault)
-        btnTabQueue = findViewById(R.id.btnTabQueue)
-        btnTabDone = findViewById(R.id.btnTabDone)
+        bottomNavBar = findViewById(R.id.bottomNavBar)
+        iconWrapDownloading = findViewById(R.id.iconWrapDownloading)
+        iconWrapVideos = findViewById(R.id.iconWrapVideos)
+        tvBadgeDownloading = findViewById(R.id.tvBadgeDownloading)
+        tvBadgeVideos = findViewById(R.id.tvBadgeVideos)
+        tvLabelDownloading = findViewById(R.id.tvLabelDownloading)
+        tvLabelVideos = findViewById(R.id.tvLabelVideos)
         btnFullscreen = findViewById(R.id.btnFullscreen)
         btnSpeed = findViewById(R.id.btnSpeed)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         setupGestures()
         setupButtons()
-        setupVaultList()
+        setupList()
         initExoPlayer()
-        refreshVaultLists(autoSelectQueueIfActive = true)
+        refreshLists(initialAutoSelect = true)
     }
 
     private fun setupButtons() {
-        findViewById<Button>(R.id.btnBackBrowser).setOnClickListener { finish() }
+        findViewById<LinearLayout>(R.id.navHome).setOnClickListener { finish() }
 
-        findViewById<Button>(R.id.btnStreamOnline).setOnClickListener {
-            val input = EditText(this).apply { hint = "Paste online .m3u8 URL to watch..." }
-            AlertDialog.Builder(this)
-                .setTitle("Stream Online M3U8")
-                .setView(input)
-                .setPositiveButton("Play Now") { _, _ ->
-                    val url = input.text.toString().trim()
-                    if (url.startsWith("http")) {
-                        playStream(url, "Online Stream", cacheKey = null, resumeId = null)
-                    }
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+        findViewById<LinearLayout>(R.id.navDownloading).setOnClickListener {
+            showingDownloadingTab = true
+            updateBottomNavVisuals()
+            refreshLists()
         }
 
-        btnTabQueue.setOnClickListener {
-            showingQueueTab = true
-            updateTabVisuals()
-            refreshVaultLists()
+        findViewById<LinearLayout>(R.id.navVideos).setOnClickListener {
+            showingDownloadingTab = false
+            updateBottomNavVisuals()
+            refreshLists()
         }
 
-        btnTabDone.setOnClickListener {
-            showingQueueTab = false
-            updateTabVisuals()
-            refreshVaultLists()
-        }
-
+        findViewById<Button>(R.id.btnStreamOnline).setOnClickListener { showStreamOnlineDialog() }
+        findViewById<Button>(R.id.btnHeaderMenu).setOnClickListener { showHeaderMenu() }
         findViewById<Button>(R.id.btnQuality).setOnClickListener { showQualityPicker() }
 
         btnSpeed.setOnClickListener {
@@ -161,9 +161,54 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateTabVisuals() {
-        btnTabQueue.setBackgroundResource(if (showingQueueTab) R.drawable.bg_tab_active else R.drawable.bg_tab_inactive)
-        btnTabDone.setBackgroundResource(if (!showingQueueTab) R.drawable.bg_tab_active else R.drawable.bg_tab_inactive)
+    private fun updateBottomNavVisuals() {
+        tvHeaderTitle.text = if (showingDownloadingTab) "Downloading" else "Videos"
+        if (showingDownloadingTab) {
+            iconWrapDownloading.setBackgroundResource(R.drawable.bg_nav_pill)
+            iconWrapVideos.background = null
+            tvLabelDownloading.setTextColor(Color.parseColor("#F0F4FF"))
+            tvLabelVideos.setTextColor(Color.parseColor("#9AA6D1"))
+        } else {
+            iconWrapDownloading.background = null
+            iconWrapVideos.setBackgroundResource(R.drawable.bg_nav_pill)
+            tvLabelDownloading.setTextColor(Color.parseColor("#9AA6D1"))
+            tvLabelVideos.setTextColor(Color.parseColor("#F0F4FF"))
+        }
+    }
+
+    private fun showStreamOnlineDialog() {
+        val input = EditText(this).apply { hint = "Paste online .m3u8 URL to stream..." }
+        AlertDialog.Builder(this)
+            .setTitle("Stream Online Video")
+            .setView(input)
+            .setPositiveButton("Play") { _, _ ->
+                val url = input.text.toString().trim()
+                if (url.startsWith("http")) playStream(url, "Online Stream", null)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showHeaderMenu() {
+        val options = arrayOf(
+            "⏸ Pause All Downloads",
+            "▶ Resume All Downloads",
+            "🔗 Stream Online .m3u8 URL",
+            "⌂ Back to Browser (Home)"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Download Manager")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> allCachedDownloads.filter { it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED }
+                        .forEach { VaultEngine.pauseDownload(this, it.request.id) }
+                    1 -> allCachedDownloads.filter { it.state == Download.STATE_STOPPED || it.state == Download.STATE_FAILED }
+                        .forEach { VaultEngine.resumeDownload(this, it.request.id) }
+                    2 -> showStreamOnlineDialog()
+                    3 -> finish()
+                }
+                uiHandler.postDelayed({ refreshLists() }, 300L)
+            }.show()
     }
 
     private fun toggleFullscreen() {
@@ -174,14 +219,15 @@ class VaultPlayerActivity : AppCompatActivity() {
         if (isFullscreen) {
             vaultHeaderBar.visibility = View.GONE
             vaultListSection.visibility = View.GONE
+            bottomNavBar.visibility = View.GONE
             params.height = ViewGroup.LayoutParams.MATCH_PARENT
-            btnFullscreen.text = "⛶"
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             vaultHeaderBar.visibility = View.VISIBLE
             vaultListSection.visibility = View.VISIBLE
-            params.height = (235 * resources.displayMetrics.density).toInt()
+            bottomNavBar.visibility = View.VISIBLE
+            params.height = (230 * resources.displayMetrics.density).toInt()
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
         playerContainer.layoutParams = params
@@ -194,17 +240,15 @@ class VaultPlayerActivity : AppCompatActivity() {
                 volumeAccum = 0f
                 return true
             }
-
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (playerView.isControllerFullyVisible) playerView.hideController()
                 else playerView.showController()
                 return true
             }
-
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                val isRightSide = e.x > gestureOverlay.width / 2f
+                val isRight = e.x > gestureOverlay.width / 2f
                 player?.let { exo ->
-                    if (isRightSide) {
+                    if (isRight) {
                         val target = exo.currentPosition + 10_000L
                         exo.seekTo(if (exo.duration > 0) target.coerceAtMost(exo.duration) else target)
                         showHud("⏩ +10s")
@@ -215,12 +259,10 @@ class VaultPlayerActivity : AppCompatActivity() {
                 }
                 return true
             }
-
             override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
                 val start = e1 ?: return false
                 if (abs(distanceY) <= abs(distanceX)) return false
                 val h = gestureOverlay.height.coerceAtLeast(1)
-
                 if (start.x > gestureOverlay.width / 2f) {
                     volumeAccum += distanceY
                     val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
@@ -259,10 +301,8 @@ class VaultPlayerActivity : AppCompatActivity() {
         val labels = mutableListOf("Auto HD (Best Available)")
         val actions = mutableListOf<() -> Unit>({
             exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                .build()
+                .clearOverridesOfType(C.TRACK_TYPE_VIDEO).build()
         })
-
         for (group in exo.currentTracks.groups) {
             if (group.type == C.TRACK_TYPE_VIDEO) {
                 for (i in 0 until group.length) {
@@ -271,14 +311,12 @@ class VaultPlayerActivity : AppCompatActivity() {
                         labels.add("${fmt.height}p (${fmt.width}x${fmt.height})")
                         actions.add {
                             exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
-                                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i))
-                                .build()
+                                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i)).build()
                         }
                     }
                 }
             }
         }
-
         AlertDialog.Builder(this)
             .setTitle("Video Playback Quality")
             .setItems(labels.toTypedArray()) { _, which ->
@@ -290,7 +328,6 @@ class VaultPlayerActivity : AppCompatActivity() {
     private fun initExoPlayer() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(VaultEngine.buildCacheDataSourceFactory(this))
-
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .setSeekBackIncrementMs(10_000L)
@@ -299,14 +336,12 @@ class VaultPlayerActivity : AppCompatActivity() {
             .also { playerView.player = it }
     }
 
-    private fun playStream(url: String, title: String, cacheKey: String?, resumeId: String?) {
+    private fun playStream(url: String, title: String, resumeId: String?) {
         saveCurrentPosition()
         playerContainer.visibility = View.VISIBLE
         currentPlayingId = resumeId
-
-        val mediaItem = VaultEngine.buildMediaItem(url, title, cacheKey)
+        val mediaItem = VaultEngine.buildMediaItem(url, title, resumeId)
         val resumeMs = if (resumeId != null) VaultEngine.getPlaybackPosition(this, resumeId) else 0L
-
         player?.apply {
             setMediaItem(mediaItem)
             prepare()
@@ -321,69 +356,100 @@ class VaultPlayerActivity : AppCompatActivity() {
         VaultEngine.savePlaybackPosition(this, id, pos)
     }
 
-    private fun setupVaultList() {
-        vaultAdapter = VaultAdapter(this, visibleItems) { dl ->
-            if (dl.state == Download.STATE_DOWNLOADING || dl.state == Download.STATE_QUEUED) {
-                VaultEngine.pauseDownload(this, dl.request.id)
-            } else {
-                VaultEngine.resumeDownload(this, dl.request.id)
-            }
-            uiHandler.postDelayed({ refreshVaultLists() }, 300L)
-        }
+    private fun setupList() {
+        vaultAdapter = VaultAdapter(this, visibleItems) { dl -> showRowActionDialog(dl) }
         downloadListView.adapter = vaultAdapter
 
         downloadListView.setOnItemClickListener { _, _, position, _ ->
             val selected = visibleItems[position]
             val title = selected.request.data.toString(Charsets.UTF_8)
-            playStream(
-                url = selected.request.uri.toString(),
-                title = title,
-                cacheKey = selected.request.customCacheKey ?: selected.request.id,
-                resumeId = selected.request.id
-            )
+            playStream(selected.request.uri.toString(), title, selected.request.id)
         }
 
         downloadListView.setOnItemLongClickListener { _, _, position, _ ->
-            val selected = visibleItems[position]
-            val title = selected.request.data.toString(Charsets.UTF_8).ifBlank { "Video" }
-            val size = VaultEngine.formatSize(selected.bytesDownloaded)
-            AlertDialog.Builder(this)
-                .setTitle("Delete This Video Only?")
-                .setMessage("Remove \"$title\" ($size) from your Vault? Other videos will not be touched.")
-                .setPositiveButton("Delete") { _, _ ->
-                    if (currentPlayingId == selected.request.id) {
-                        player?.stop()
-                        playerContainer.visibility = View.GONE
-                    }
-                    VaultEngine.removeDownload(this, selected.request.id)
-                    uiHandler.postDelayed({ refreshVaultLists() }, 300L)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+            showRowActionDialog(visibleItems[position])
             true
         }
     }
 
-    private fun refreshVaultLists(autoSelectQueueIfActive: Boolean = false) {
-        val all = VaultEngine.getAllDownloads(this)
-        val queueList = all.filter { it.state != Download.STATE_COMPLETED }
-        val doneList = all.filter { it.state == Download.STATE_COMPLETED }
+    private fun showRowActionDialog(dl: Download) {
+        val title = dl.request.data.toString(Charsets.UTF_8).ifBlank { "Video" }
+        val isComplete = dl.state == Download.STATE_COMPLETED
+        val isActive = dl.state == Download.STATE_DOWNLOADING || dl.state == Download.STATE_QUEUED
 
-        if (autoSelectQueueIfActive && queueList.isNotEmpty()) {
-            showingQueueTab = true
-            updateTabVisuals()
+        val choices = if (isComplete) {
+            arrayOf("▶ Play Video", "🗑 Delete Video")
+        } else {
+            arrayOf(
+                if (isActive) "⏸ Pause Download" else "▶ Resume Download",
+                "▶ Play Preview",
+                "🗑 Cancel & Delete"
+            )
         }
 
-        btnTabQueue.text = "⬇ Queue (${queueList.size})"
-        btnTabDone.text = "✔ Downloaded (${doneList.size})"
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(choices) { _, which ->
+                if (isComplete) {
+                    when (which) {
+                        0 -> playStream(dl.request.uri.toString(), title, dl.request.id)
+                        1 -> confirmDelete(dl, title)
+                    }
+                } else {
+                    when (which) {
+                        0 -> {
+                            if (isActive) VaultEngine.pauseDownload(this, dl.request.id)
+                            else VaultEngine.resumeDownload(this, dl.request.id)
+                            uiHandler.postDelayed({ refreshLists() }, 300L)
+                        }
+                        1 -> playStream(dl.request.uri.toString(), title, dl.request.id)
+                        2 -> confirmDelete(dl, title)
+                    }
+                }
+            }.show()
+    }
+
+    private fun confirmDelete(dl: Download, title: String) {
+        val size = VaultEngine.formatSize(dl.bytesDownloaded)
+        AlertDialog.Builder(this)
+            .setTitle("Delete Video?")
+            .setMessage("Remove \"$title\" ($size)?")
+            .setPositiveButton("Delete") { _, _ ->
+                if (currentPlayingId == dl.request.id) {
+                    player?.stop()
+                    playerContainer.visibility = View.GONE
+                }
+                VaultEngine.removeDownload(this, dl.request.id)
+                uiHandler.postDelayed({ refreshLists() }, 300L)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun refreshLists(initialAutoSelect: Boolean = false) {
+        allCachedDownloads = VaultEngine.getAllDownloads(this)
+        val downloadingList = allCachedDownloads.filter { it.state != Download.STATE_COMPLETED }
+        val videosList = allCachedDownloads.filter { it.state == Download.STATE_COMPLETED }
+
+        if (initialAutoSelect) {
+            showingDownloadingTab = downloadingList.isNotEmpty()
+            updateBottomNavVisuals()
+        }
+
+        tvBadgeDownloading.text = downloadingList.size.toString()
+        tvBadgeDownloading.visibility = if (downloadingList.isNotEmpty()) View.VISIBLE else View.GONE
+
+        tvBadgeVideos.text = videosList.size.toString()
+        tvBadgeVideos.visibility = if (videosList.isNotEmpty()) View.VISIBLE else View.GONE
 
         visibleItems.clear()
-        visibleItems.addAll(if (showingQueueTab) queueList else doneList)
+        visibleItems.addAll(if (showingDownloadingTab) downloadingList else videosList)
+
         tvEmptyVault.visibility = if (visibleItems.isEmpty()) View.VISIBLE else View.GONE
-        tvEmptyVault.text = if (showingQueueTab) {
-            "No active or queued downloads."
+        tvEmptyVault.text = if (showingDownloadingTab) {
+            "No active downloads.\nTap Home below to capture a video stream."
         } else {
-            "No completed videos yet. Check the Queue tab while downloading."
+            "No downloaded videos yet."
         }
         vaultAdapter.notifyDataSetChanged()
     }
