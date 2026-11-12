@@ -13,6 +13,7 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.offline.DefaultDownloadIndex
 import androidx.media3.exoplayer.offline.DefaultDownloaderFactory
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
@@ -99,6 +100,8 @@ object VaultEngine {
     @Synchronized
     fun getDownloadManager(context: Context): DownloadManager {
         return downloadManager ?: run {
+            val db = getDatabase(context)
+            val downloadIndex = DefaultDownloadIndex(db)
             val writeFactory = CacheDataSource.Factory()
                 .setCache(getPrivateCache(context))
                 .setUpstreamDataSourceFactory(buildUpstreamFactory())
@@ -107,7 +110,7 @@ object VaultEngine {
 
             DownloadManager(
                 context.applicationContext,
-                getDatabase(context),
+                downloadIndex,
                 downloaderFactory
             ).apply {
                 maxParallelDownloads = 3
