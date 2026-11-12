@@ -46,7 +46,7 @@ class VaultAdapter(
         tvTitle.text = rawTitle
 
         val dateStr = dateFormat.format(Date(dl.updateTimeMs))
-        tvMeta.text = "Format: HLS (M3U8)  •  $dateStr"
+        tvMeta.text = "HLS (M3U8)  •  $dateStr"
 
         val sizeStr = VaultEngine.formatSize(dl.bytesDownloaded)
         val pct = dl.percentDownloaded.coerceAtLeast(0f).toInt()
@@ -54,33 +54,33 @@ class VaultAdapter(
         when (dl.state) {
             Download.STATE_COMPLETED -> {
                 speedHistory.remove(dl.request.id)
-                tvStatus.setTextColor(Color.parseColor("#66BB6A"))
-                tvStatus.text = "✔ Completed (100%)  •  Size: $sizeStr"
+                tvStatus.setTextColor(Color.parseColor("#00FF9C"))
+                tvStatus.text = "✔ Completed (100%)  •  $sizeStr"
                 btnAction.visibility = View.GONE
             }
             Download.STATE_DOWNLOADING -> {
                 val speed = computeLiveSpeed(dl.request.id, dl.bytesDownloaded)
-                tvStatus.setTextColor(Color.parseColor("#4FC3F7"))
+                tvStatus.setTextColor(Color.parseColor("#00E5FF"))
                 tvStatus.text = "⬇ $pct%  •  $speed  •  $sizeStr"
                 btnAction.visibility = View.VISIBLE
                 btnAction.text = "Pause"
             }
             Download.STATE_STOPPED -> {
                 speedHistory.remove(dl.request.id)
-                tvStatus.setTextColor(Color.parseColor("#FFB74D"))
+                tvStatus.setTextColor(Color.parseColor("#FF2A85"))
                 tvStatus.text = "⏸ Paused ($pct%)  •  $sizeStr"
                 btnAction.visibility = View.VISIBLE
                 btnAction.text = "Resume"
             }
             Download.STATE_FAILED -> {
                 speedHistory.remove(dl.request.id)
-                tvStatus.setTextColor(Color.parseColor("#EF5350"))
+                tvStatus.setTextColor(Color.parseColor("#FF5370"))
                 tvStatus.text = "✖ Failed (Code ${dl.failureReason})  •  $sizeStr"
                 btnAction.visibility = View.VISIBLE
                 btnAction.text = "Retry"
             }
             else -> {
-                tvStatus.setTextColor(Color.parseColor("#BDBDBD"))
+                tvStatus.setTextColor(Color.parseColor("#BB9AF7"))
                 tvStatus.text = "⏳ Queued ($pct%)  •  $sizeStr"
                 btnAction.visibility = View.VISIBLE
                 btnAction.text = "Pause"
@@ -95,8 +95,8 @@ class VaultAdapter(
         val now = System.currentTimeMillis()
         val prev = speedHistory[id]
         if (prev == null) {
-            speedHistory[id] = SpeedSample(currentBytes, now, "Calculating...")
-            return "Calculating..."
+            speedHistory[id] = SpeedSample(currentBytes, now, "Starting...")
+            return "Starting..."
         }
         val elapsedMs = now - prev.timeMs
         if (elapsedMs < 800L) return prev.speedText
