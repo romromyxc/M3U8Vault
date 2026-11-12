@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#090B14"
+    android:padding="14dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Video Name"
+        android:textColor="#7A86B6"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/etCustomVideoTitle"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_neon_input"
+        android:hint="Enter video title..."
+        android:inputType="text"
+        android:paddingHorizontal="10dp"
+        android:singleLine="true"
+        android:textColor="#F0F4FF"
+        android:textColorHint="#68749C"
+        android:textSize="13sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:text="Select Quality / Stream"
+        android:textColor="#7A86B6"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <ListView
+        android:id="@+id/lvStreamChoices"
+        android:layout_width="match_parent"
+        android:layout_height="250dp"
+        android:divider="#090B14"
+        android:dividerHeight="6dp" />
+</LinearLayout>
+<!-- END OF FILE -->
