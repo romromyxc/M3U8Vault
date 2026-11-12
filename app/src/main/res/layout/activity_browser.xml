@@ -6,7 +6,7 @@
     android:orientation="vertical"
     android:background="#06070D">
 
-    <!-- Clean Single Top Search & Address Bar -->
+    <!-- Top Search & Address Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -74,20 +74,44 @@
         android:progressDrawable="@drawable/progress_neon"
         android:visibility="gone" />
 
-    <!-- WebView Viewport -->
+    <!-- Browser Viewport + Floating Video Catcher Overlay -->
     <FrameLayout
-        android:id="@+id/webContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#06070D" />
+        android:background="#06070D">
+
+        <FrameLayout
+            android:id="@+id/webContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Floating Draggable Video Catcher Pill -->
+        <Button
+            android:id="@+id/btnFloatingCatcher"
+            android:layout_width="wrap_content"
+            android:layout_height="46dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:minWidth="66dp"
+            android:paddingHorizontal="14dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:elevation="8dp"
+            android:background="@drawable/bg_floating_catcher"
+            app:backgroundTint="@null"
+            android:text="⬇ 0"
+            android:textColor="#00E5FF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </FrameLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#1D2542" />
 
-    <!-- Single Minimal Bottom Bar: Back | Download | Tab Icon | Downloading | Hidden Nav Menu -->
+    <!-- Clean Bottom Bar: Back | Tabs | Downloading | Menu -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -99,7 +123,7 @@
 
         <Button
             android:id="@+id/btnBack"
-            android:layout_width="38dp"
+            android:layout_width="42dp"
             android:layout_height="42dp"
             android:minWidth="0dp"
             android:padding="0dp"
@@ -113,26 +137,10 @@
             android:textSize="14sp" />
 
         <Button
-            android:id="@+id/btnDownloadBadge"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_weight="1"
-            android:layout_marginStart="6dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_cyan"
-            app:backgroundTint="@null"
-            android:text="⬇ Download (0)"
-            android:textColor="#00E5FF"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <!-- Tab Icon Positioned Right in the Middle -->
-        <Button
             android:id="@+id/btnTabs"
-            android:layout_width="46dp"
+            android:layout_width="56dp"
             android:layout_height="42dp"
-            android:layout_marginHorizontal="6dp"
+            android:layout_marginStart="6dp"
             android:minWidth="0dp"
             android:padding="0dp"
             android:insetTop="0dp"
@@ -141,7 +149,7 @@
             app:backgroundTint="@null"
             android:text="❐ 1"
             android:textColor="#BB9AF7"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <Button
@@ -149,19 +157,19 @@
             android:layout_width="0dp"
             android:layout_height="42dp"
             android:layout_weight="1"
-            android:layout_marginEnd="6dp"
+            android:layout_marginHorizontal="6dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:background="@drawable/bg_btn_neon_pink"
             app:backgroundTint="@null"
             android:text="⚡ Downloading"
             android:textColor="#FF6EB4"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <Button
             android:id="@+id/btnMenu"
-            android:layout_width="38dp"
+            android:layout_width="42dp"
             android:layout_height="42dp"
             android:minWidth="0dp"
             android:padding="0dp"
