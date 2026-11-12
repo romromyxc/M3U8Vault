@@ -201,7 +201,6 @@ object VaultEngine {
         val uniqueId = "${System.currentTimeMillis()}_${m3u8Url.hashCode()}"
         val request = DownloadRequest.Builder(uniqueId, Uri.parse(m3u8Url))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
-            .setCustomCacheKey(uniqueId)
             .setData(title.toByteArray(Charsets.UTF_8))
             .build()
 
@@ -231,7 +230,6 @@ object VaultEngine {
         return MediaItem.Builder()
             .setUri(url)
             .setMediaId(cacheKey ?: url)
-            .setCustomCacheKey(cacheKey)
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
             .build()
