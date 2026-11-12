@@ -33,6 +33,18 @@ object BrowserHelper {
         return blockedKeywords.any { lower.contains(it) }
     }
 
+    fun isHlsStream(url: String, acceptHeader: String = ""): Boolean {
+        val u = url.lowercase()
+        if (u.endsWith(".ts") || u.endsWith(".m4s") || u.endsWith(".jpg") || u.endsWith(".png") || u.endsWith(".css") || u.endsWith(".js")) {
+            return false
+        }
+        return u.contains(".m3u8") ||
+            acceptHeader.lowercase().contains("mpegurl") ||
+            u.contains("chunklist") ||
+            u.contains("master.txt") ||
+            u.contains("/hls/") && u.contains("manifest")
+    }
+
     fun emptyResponse(): WebResourceResponse =
         WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
 
@@ -46,15 +58,20 @@ object BrowserHelper {
         (function() {
             if (window.__vaultHooked) return;
             window.__vaultHooked = true;
+            const checkUrl = (u) => {
+                if (typeof u === 'string' && (u.includes('.m3u8') || u.includes('chunklist') || u.includes('master.txt'))) {
+                    VaultSniffer.onM3u8Detected(new URL(u, location.href).href);
+                }
+            };
             const origFetch = window.fetch;
             window.fetch = function(...args) {
                 const target = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
-                if (target && target.includes('.m3u8')) VaultSniffer.onM3u8Detected(target);
+                checkUrl(target);
                 return origFetch.apply(this, args);
             };
             const origOpen = XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = function(method, url) {
-                if (typeof url === 'string' && url.includes('.m3u8')) VaultSniffer.onM3u8Detected(url);
+                checkUrl(url);
                 return origOpen.apply(this, arguments);
             };
             window.open = function() { return null; };
