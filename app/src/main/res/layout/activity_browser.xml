@@ -5,57 +5,190 @@
     android:orientation="vertical"
     android:background="#121212">
 
+    <!-- Top Address & Search Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="8dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="6dp"
         android:background="#1E1E1E">
+
+        <Button
+            android:id="@+id/btnHome"
+            android:layout_width="40dp"
+            android:layout_height="42dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="⌂"
+            android:textSize="18sp" />
 
         <EditText
             android:id="@+id/urlBar"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="42dp"
             android:layout_weight="1"
+            android:layout_marginHorizontal="6dp"
             android:background="#2C2C2C"
             android:hint="Search SearXNG or enter URL..."
             android:imeOptions="actionGo"
             android:inputType="textUri"
-            android:paddingHorizontal="12dp"
+            android:paddingHorizontal="10dp"
+            android:selectAllOnFocus="true"
             android:singleLine="true"
             android:textColor="#FFFFFF"
             android:textColorHint="#888888"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnClearUrl"
+            android:layout_width="36dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="4dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="✕"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnReload"
+            android:layout_width="40dp"
+            android:layout_height="42dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="↻"
+            android:textSize="17sp" />
     </LinearLayout>
 
-    <WebView
-        android:id="@+id/webView"
+    <!-- Page Loading Progress Bar -->
+    <ProgressBar
+        android:id="@+id/pageProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:max="100"
+        android:progress="0"
+        android:visibility="gone" />
+
+    <!-- Multi-Tab WebView Container -->
+    <FrameLayout
+        android:id="@+id/webContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <!-- Browser Navigation & Multi-Tab Controls -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="8dp"
-        android:background="#1E1E1E">
+        android:paddingHorizontal="6dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp"
+        android:background="#181818">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:enabled="false"
+            android:text="◀"
+            android:textSize="15sp" />
+
+        <Button
+            android:id="@+id/btnForward"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:enabled="false"
+            android:text="▶"
+            android:textSize="15sp" />
+
+        <Button
+            android:id="@+id/btnTabs"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1.3"
+            android:layout_marginEnd="4dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="Tabs (1)"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnShield"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1.4"
+            android:layout_marginEnd="4dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="Shield: ON"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnMenu"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="0.8"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="⋮"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <!-- Stream Sniffer & Private Vault Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="6dp"
+        android:background="#181818">
 
         <Button
             android:id="@+id/btnDownloadBadge"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="44dp"
             android:layout_weight="1"
             android:layout_marginEnd="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:enabled="false"
             android:text="Streams (0)" />
 
         <Button
             android:id="@+id/btnVault"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="44dp"
             android:layout_weight="1"
             android:layout_marginStart="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="Private Vault" />
     </LinearLayout>
 </LinearLayout>
