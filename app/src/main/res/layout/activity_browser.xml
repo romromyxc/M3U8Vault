@@ -87,7 +87,7 @@
         android:layout_height="1dp"
         android:background="#1D2542" />
 
-    <!-- Single Minimal Bottom Bar: Back | Download | Tab Icon | Private Vault | Hidden Nav Menu -->
+    <!-- Single Minimal Bottom Bar: Back | Download | Tab Icon | Downloading | Hidden Nav Menu -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -127,7 +127,7 @@
             android:textSize="12sp"
             android:textStyle="bold" />
 
-        <!-- Tab Icon Positioned Right in the Middle Between Download & Private Vault -->
+        <!-- Tab Icon Positioned Right in the Middle -->
         <Button
             android:id="@+id/btnTabs"
             android:layout_width="46dp"
@@ -154,12 +154,11 @@
             android:insetBottom="0dp"
             android:background="@drawable/bg_btn_neon_pink"
             app:backgroundTint="@null"
-            android:text="⚡ Vault"
+            android:text="⚡ Downloading"
             android:textColor="#FF6EB4"
             android:textSize="12sp"
             android:textStyle="bold" />
 
-        <!-- Hidden Navigation & Browser Tools Trigger -->
         <Button
             android:id="@+id/btnMenu"
             android:layout_width="38dp"
