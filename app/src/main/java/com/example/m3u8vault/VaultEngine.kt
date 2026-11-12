@@ -1,7 +1,10 @@
 package com.example.m3u8vault
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -43,6 +46,20 @@ object VaultEngine {
     private var downloadManager: DownloadManager? = null
 
     val headerRegistry = ConcurrentHashMap<String, StreamHeaders>()
+
+    fun ensureNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+                val ch = NotificationChannel(
+                    CHANNEL_ID,
+                    "Vault Video Downloads",
+                    NotificationManager.IMPORTANCE_LOW
+                )
+                nm.createNotificationChannel(ch)
+            }
+        }
+    }
 
     fun getPrivateVaultDir(context: Context): File {
         val dir = File(context.filesDir, "private_vault")
@@ -99,6 +116,7 @@ object VaultEngine {
 
     @Synchronized
     fun getDownloadManager(context: Context): DownloadManager {
+        ensureNotificationChannel(context)
         return downloadManager ?: run {
             val db = getDatabase(context)
             val downloadIndex = DefaultDownloadIndex(db)
@@ -119,7 +137,24 @@ object VaultEngine {
         }
     }
 
+    fun getAllDownloads(context: Context): List<Download> {
+        val dm = getDownloadManager(context)
+        val merged = LinkedHashMap<String, Download>()
+        val cursor = dm.downloadIndex.getDownloads()
+        cursor.use {
+            while (it.moveToNext()) {
+                merged[it.download.request.id] = it.download
+            }
+        }
+        // Overlay active in-memory downloads so real-time progress & queued items always show
+        for (active in dm.currentDownloads) {
+            merged[active.request.id] = active
+        }
+        return merged.values.sortedByDescending { it.updateTimeMs }
+    }
+
     fun enqueueM3u8Download(context: Context, title: String, m3u8Url: String, headers: StreamHeaders) {
+        ensureNotificationChannel(context)
         headerRegistry[m3u8Url] = headers
         val request = DownloadRequest.Builder(m3u8Url, Uri.parse(m3u8Url))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -166,6 +201,11 @@ class VaultDownloadService : DownloadService(
     android.R.string.untitled,
     0
 ) {
+    override fun onCreate() {
+        VaultEngine.ensureNotificationChannel(this)
+        super.onCreate()
+    }
+
     override fun getDownloadManager(): DownloadManager = VaultEngine.getDownloadManager(this)
     override fun getScheduler() = PlatformScheduler(this, 1)
     override fun getForegroundNotification(
@@ -176,7 +216,7 @@ class VaultDownloadService : DownloadService(
             this,
             android.R.drawable.stat_sys_download,
             null,
-            "Downloading ${downloads.size} HLS video(s) to Private Vault",
+            "Downloading ${downloads.size} HLS video(s)",
             downloads,
             notMetRequirements
         )
