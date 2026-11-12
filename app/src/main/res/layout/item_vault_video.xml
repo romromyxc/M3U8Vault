@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="#1A1A1A"
+    android:background="@drawable/bg_vault_card"
     android:padding="12dp">
 
     <LinearLayout
@@ -20,7 +21,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#FFFFFF"
+            android:textColor="#F0F4FF"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -29,15 +30,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
-            android:textColor="#9E9E9E"
-            android:textSize="12sp" />
+            android:textColor="#7A86B6"
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/tvVideoStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="#4FC3F7"
+            android:layout_marginTop="5dp"
+            android:textColor="#00E5FF"
             android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -45,14 +46,18 @@
     <Button
         android:id="@+id/btnRowAction"
         android:layout_width="wrap_content"
-        android:layout_height="36dp"
+        android:layout_height="34dp"
         android:minWidth="74dp"
         android:paddingHorizontal="10dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
+        android:background="@drawable/bg_btn_neon_pink"
+        app:backgroundTint="@null"
         android:focusable="false"
         android:focusableInTouchMode="false"
         android:text="Pause"
-        android:textSize="12sp" />
+        android:textColor="#FF6EB4"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 </LinearLayout>
 <!-- END OF FILE -->
