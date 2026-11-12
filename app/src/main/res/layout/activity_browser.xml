@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#121212">
+    android:background="#06070D">
 
-    <!-- Top Address & Search Bar -->
+    <!-- Tokyo Night Top Search & Address Dock -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="6dp"
-        android:background="#1E1E1E">
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="8dp"
+        android:background="#0A0D18">
 
         <Button
             android:id="@+id/btnHome"
@@ -23,7 +24,10 @@
             android:padding="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:text="⌂"
+            android:textColor="#00E5FF"
             android:textSize="18sp" />
 
         <EditText
@@ -32,27 +36,30 @@
             android:layout_height="42dp"
             android:layout_weight="1"
             android:layout_marginHorizontal="6dp"
-            android:background="#2C2C2C"
-            android:hint="Search SearXNG or enter URL..."
+            android:background="@drawable/bg_neon_input"
+            android:hint="Search SearXNG or paste URL..."
             android:imeOptions="actionGo"
             android:inputType="textUri"
-            android:paddingHorizontal="10dp"
+            android:paddingHorizontal="12dp"
             android:selectAllOnFocus="true"
             android:singleLine="true"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#888888"
+            android:textColor="#F0F4FF"
+            android:textColorHint="#68749C"
             android:textSize="13sp" />
 
         <Button
             android:id="@+id/btnClearUrl"
             android:layout_width="36dp"
             android:layout_height="42dp"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:minWidth="0dp"
             android:padding="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:text="✕"
+            android:textColor="#FF2A85"
             android:textSize="13sp" />
 
         <Button
@@ -63,11 +70,14 @@
             android:padding="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:text="↻"
+            android:textColor="#00E5FF"
             android:textSize="17sp" />
     </LinearLayout>
 
-    <!-- Page Loading Progress Bar -->
+    <!-- Neon Pink-to-Cyan Loading Line -->
     <ProgressBar
         android:id="@+id/pageProgress"
         style="?android:attr/progressBarStyleHorizontal"
@@ -75,100 +85,125 @@
         android:layout_height="3dp"
         android:max="100"
         android:progress="0"
+        android:progressDrawable="@drawable/progress_neon"
         android:visibility="gone" />
 
-    <!-- Multi-Tab WebView Container -->
+    <!-- Multi-Tab WebView Viewport -->
     <FrameLayout
         android:id="@+id/webContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:background="#06070D" />
 
-    <!-- Browser Navigation & Multi-Tab Controls -->
+    <!-- Neon Accent Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#1D2542" />
+
+    <!-- Browser Navigation & Shield Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="6dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="2dp"
-        android:background="#181818">
+        android:paddingHorizontal="8dp"
+        android:paddingTop="7dp"
+        android:paddingBottom="3dp"
+        android:background="#0A0D18">
 
         <Button
             android:id="@+id/btnBack"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:minWidth="0dp"
             android:padding="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:enabled="false"
             android:text="◀"
-            android:textSize="15sp" />
+            android:textColor="#E2E8FF"
+            android:textSize="14sp" />
 
         <Button
             android:id="@+id/btnForward"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:minWidth="0dp"
             android:padding="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:enabled="false"
             android:text="▶"
-            android:textSize="15sp" />
+            android:textColor="#E2E8FF"
+            android:textSize="14sp" />
 
         <Button
             android:id="@+id/btnTabs"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:layout_weight="1.3"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:minWidth="0dp"
             android:paddingHorizontal="4dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:text="Tabs (1)"
-            android:textSize="12sp" />
+            android:textColor="#BB9AF7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/btnShield"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:layout_weight="1.4"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:minWidth="0dp"
             android:paddingHorizontal="4dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:text="Shield: ON"
-            android:textSize="12sp" />
+            android:textColor="#00FF9C"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/btnMenu"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="38dp"
             android:layout_weight="0.8"
             android:minWidth="0dp"
             android:padding="0dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
             android:text="⋮"
+            android:textColor="#00E5FF"
             android:textSize="18sp" />
     </LinearLayout>
 
-    <!-- Stream Sniffer & Private Vault Bar -->
+    <!-- Primary Neon Action Dock: Download & Tokyo Vault -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="6dp"
-        android:background="#181818">
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="7dp"
+        android:background="#0A0D18">
 
         <Button
             android:id="@+id/btnDownloadBadge"
@@ -178,8 +213,12 @@
             android:layout_marginEnd="6dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:enabled="false"
-            android:text="Streams (0)" />
+            android:background="@drawable/bg_btn_neon_cyan"
+            app:backgroundTint="@null"
+            android:text="Download (0)"
+            android:textColor="#00E5FF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/btnVault"
@@ -189,6 +228,12 @@
             android:layout_marginStart="6dp"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:text="Private Vault" />
+            android:background="@drawable/bg_btn_neon_pink"
+            app:backgroundTint="@null"
+            android:text="⚡ Private Vault"
+            android:textColor="#FF6EB4"
+            android:textSize="13sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>
+<!-- END OF FILE -->
