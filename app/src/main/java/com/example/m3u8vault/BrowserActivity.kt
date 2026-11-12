@@ -40,6 +40,7 @@ class BrowserActivity : AppCompatActivity() {
     private var adShieldEnabled = true
     private var desktopMode = false
     private var searxngBaseUrl = "https://searx.be"
+    private var isInspectingStreams = false
     private val inspectExecutor = Executors.newSingleThreadExecutor()
 
     private val backCallback = object : OnBackPressedCallback(false) {
@@ -99,6 +100,11 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun currentTab(): BrowserTab? = tabs.getOrNull(activeTabIndex)
+
+    private fun safeCookies(url: String): String {
+        if (url.isBlank() || !url.startsWith("http")) return ""
+        return runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull().orEmpty()
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun openNewTab(initialUrl: String? = searxngBaseUrl): BrowserTab {
@@ -258,7 +264,9 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun updateBadge() {
-        val count = currentTab()?.streams?.size ?: 0
+        val count = synchronized(currentTab()?.streams ?: emptySet<String>()) {
+            currentTab()?.streams?.size ?: 0
+        }
         btnDownloadBadge.text = "⬇ Download ($count)"
         btnDownloadBadge.isEnabled = true
     }
@@ -275,7 +283,8 @@ class BrowserActivity : AppCompatActivity() {
         val titles = tabs.mapIndexed { i, t ->
             val mark = if (i == activeTabIndex) "● " else "   "
             val name = t.webView.title?.take(30)?.ifBlank { null } ?: t.webView.url?.take(30) ?: "New Tab"
-            "$mark$name (${t.streams.size})"
+            val cnt = synchronized(t.streams) { t.streams.size }
+            "$mark$name ($cnt)"
         }.toTypedArray()
 
         AlertDialog.Builder(this)
@@ -329,8 +338,8 @@ class BrowserActivity : AppCompatActivity() {
     private fun showManualPasteDialog() {
         val tab = currentTab() ?: return
         val pageUrl = tab.webView.url.orEmpty()
-        val ua = tab.webView.settings.userAgentString
-        val cookies = CookieManager.getInstance().getCookie(pageUrl).orEmpty()
+        val ua = runCatching { tab.webView.settings.userAgentString }.getOrDefault(BrowserHelper.MOBILE_UA)
+        val cookies = safeCookies(pageUrl)
         val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "HLS_Video" } ?: "HLS_Video"
 
         val box = LinearLayout(this).apply {
@@ -349,8 +358,12 @@ class BrowserActivity : AppCompatActivity() {
                 val url = etUrl.text.toString().trim()
                 val name = etTitle.text.toString().trim().ifBlank { defaultTitle }
                 if (url.startsWith("http")) {
-                    VaultEngine.enqueueM3u8Download(this, name, url, StreamHeaders(pageUrl, ua, cookies))
-                    Toast.makeText(this, "Queued to Private Vault", Toast.LENGTH_SHORT).show()
+                    runCatching {
+                        VaultEngine.enqueueM3u8Download(this, name, url, StreamHeaders(pageUrl, ua, cookies))
+                        Toast.makeText(this, "Queued to Private Vault", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        Toast.makeText(this, "Queue error: ${it.message}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -358,68 +371,84 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun openSmartDownloadPicker() {
+        if (isInspectingStreams) return
         val tab = currentTab() ?: return
-        val rawUrls = tab.streams.toList()
+        val rawUrls = synchronized(tab.streams) { tab.streams.toList() }
         if (rawUrls.isEmpty()) {
             showManualPasteDialog()
             return
         }
 
         val pageUrl = tab.webView.url.orEmpty()
-        val ua = tab.webView.settings.userAgentString
-        val cookies = CookieManager.getInstance().getCookie(pageUrl).orEmpty()
+        val ua = runCatching { tab.webView.settings.userAgentString }.getOrDefault(BrowserHelper.MOBILE_UA)
+        val cookies = safeCookies(pageUrl)
         val headers = StreamHeaders(pageUrl, ua, cookies)
         val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "Video" } ?: "Video"
 
+        isInspectingStreams = true
         Toast.makeText(this, "Checking video qualities...", Toast.LENGTH_SHORT).show()
+
         inspectExecutor.execute {
             val options = StreamInspector.inspectAll(rawUrls, headers)
-            runOnUiThread { showCompactStreamDialog(defaultTitle, options, headers) }
+            runOnUiThread {
+                isInspectingStreams = false
+                if (!isFinishing && !isDestroyed) {
+                    showCompactStreamDialog(defaultTitle, options, headers)
+                }
+            }
         }
     }
 
     private fun showCompactStreamDialog(defaultTitle: String, options: List<StreamOption>, headers: StreamHeaders) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_stream_picker, null)
-        val etTitle = dialogView.findViewById<EditText>(R.id.etCustomVideoTitle)
-        val listView = dialogView.findViewById<ListView>(R.id.lvStreamChoices)
-        etTitle.setText(defaultTitle)
+        try {
+            val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_stream_picker, null)
+            val etTitle = dialogView.findViewById<EditText>(R.id.etCustomVideoTitle)
+            val listView = dialogView.findViewById<ListView>(R.id.lvStreamChoices)
+            etTitle.setText(defaultTitle)
 
-        val adapter = object : BaseAdapter() {
-            override fun getCount() = options.size
-            override fun getItem(p: Int) = options[p]
-            override fun getItemId(p: Int) = p.toLong()
-            override fun getView(pos: Int, convertView: View?, parent: ViewGroup): View {
-                val row = convertView ?: LayoutInflater.from(this@BrowserActivity)
-                    .inflate(R.layout.item_stream_choice, parent, false)
-                val opt = options[pos]
-                row.findViewById<CheckBox>(R.id.cbStreamSelect).isChecked = opt.selected
-                row.findViewById<TextView>(R.id.tvStreamQuality).text = opt.qualityBadge
-                row.findViewById<TextView>(R.id.tvStreamInfo).text = opt.infoLine
-                row.findViewById<TextView>(R.id.tvStreamUrlPreview).text = opt.url
-                return row
-            }
-        }
-        listView.adapter = adapter
-        listView.setOnItemClickListener { _, _, pos, _ ->
-            options[pos].selected = !options[pos].selected
-            adapter.notifyDataSetChanged()
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Detected Streams (${options.size})")
-            .setView(dialogView)
-            .setPositiveButton("Download Selected") { _, _ ->
-                val baseName = etTitle.text.toString().trim().ifBlank { defaultTitle }
-                val picked = options.filter { it.selected }
-                picked.forEachIndexed { idx, opt ->
-                    val finalName = if (picked.size > 1) "${baseName}_${idx + 1}" else baseName
-                    VaultEngine.enqueueM3u8Download(this, finalName, opt.url, headers)
+            val adapter = object : BaseAdapter() {
+                override fun getCount() = options.size
+                override fun getItem(p: Int) = options[p]
+                override fun getItemId(p: Int) = p.toLong()
+                override fun getView(pos: Int, convertView: View?, parent: ViewGroup): View {
+                    val row = convertView ?: LayoutInflater.from(this@BrowserActivity)
+                        .inflate(R.layout.item_stream_choice, parent, false)
+                    val opt = options[pos]
+                    row.findViewById<CheckBox>(R.id.cbStreamSelect).isChecked = opt.selected
+                    row.findViewById<TextView>(R.id.tvStreamQuality).text = opt.qualityBadge
+                    row.findViewById<TextView>(R.id.tvStreamInfo).text = opt.infoLine
+                    row.findViewById<TextView>(R.id.tvStreamUrlPreview).text = opt.url
+                    return row
                 }
-                Toast.makeText(this, "Queued ${picked.size} video(s) to Vault", Toast.LENGTH_SHORT).show()
             }
-            .setNeutralButton("Paste URL") { _, _ -> showManualPasteDialog() }
-            .setNegativeButton("Cancel", null)
-            .show()
+            listView.adapter = adapter
+            listView.setOnItemClickListener { _, _, pos, _ ->
+                options[pos].selected = !options[pos].selected
+                adapter.notifyDataSetChanged()
+            }
+
+            AlertDialog.Builder(this)
+                .setTitle("Detected Streams (${options.size})")
+                .setView(dialogView)
+                .setPositiveButton("Download Selected") { _, _ ->
+                    val baseName = etTitle.text.toString().trim().ifBlank { defaultTitle }
+                    val picked = options.filter { it.selected }
+                    runCatching {
+                        picked.forEachIndexed { idx, opt ->
+                            val finalName = if (picked.size > 1) "${baseName}_${idx + 1}" else baseName
+                            VaultEngine.enqueueM3u8Download(this, finalName, opt.url, headers)
+                        }
+                        Toast.makeText(this, "Queued ${picked.size} video(s) to Vault", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        Toast.makeText(this, "Queue error: ${it.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .setNeutralButton("Paste URL") { _, _ -> showManualPasteDialog() }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Dialog error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onDestroy() {
