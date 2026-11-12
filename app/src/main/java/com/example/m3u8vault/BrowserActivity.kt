@@ -3,6 +3,7 @@ package com.example.m3u8vault
 import android.annotation.SuppressLint
 import android.content.*
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Message
 import android.view.*
@@ -15,6 +16,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Collections
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 class BrowserActivity : AppCompatActivity() {
 
@@ -31,7 +33,7 @@ class BrowserActivity : AppCompatActivity() {
     private lateinit var btnBack: Button
     private lateinit var btnReload: Button
     private lateinit var btnTabs: Button
-    private lateinit var btnDownloadBadge: Button
+    private lateinit var btnFloatingCatcher: Button
 
     private val tabs = mutableListOf<BrowserTab>()
     private var activeTabIndex = 0
@@ -60,10 +62,11 @@ class BrowserActivity : AppCompatActivity() {
         btnBack = findViewById(R.id.btnBack)
         btnReload = findViewById(R.id.btnReload)
         btnTabs = findViewById(R.id.btnTabs)
-        btnDownloadBadge = findViewById(R.id.btnDownloadBadge)
+        btnFloatingCatcher = findViewById(R.id.btnFloatingCatcher)
 
         onBackPressedDispatcher.addCallback(this, backCallback)
         setupListeners()
+        setupFloatingCatcher()
         openNewTab(searxngBaseUrl)
     }
 
@@ -91,10 +94,46 @@ class BrowserActivity : AppCompatActivity() {
 
         btnBack.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoBack() }?.goBack() }
         btnTabs.setOnClickListener { showTabSwitcher() }
-        btnDownloadBadge.setOnClickListener { openSmartDownloadPicker() }
         findViewById<Button>(R.id.btnMenu).setOnClickListener { showNavigationDrawerMenu() }
         findViewById<Button>(R.id.btnVault).setOnClickListener {
             startActivity(Intent(this, VaultPlayerActivity::class.java))
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupFloatingCatcher() {
+        var dX = 0f
+        var dY = 0f
+        var downX = 0f
+        var downY = 0f
+        var moved = false
+
+        btnFloatingCatcher.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    dX = v.x - event.rawX
+                    dY = v.y - event.rawY
+                    moved = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(event.rawX - downX) > 12f || abs(event.rawY - downY) > 12f) {
+                        moved = true
+                        val maxX = (webContainer.width - v.width).coerceAtLeast(0).toFloat()
+                        val maxY = (webContainer.height - v.height).coerceAtLeast(0).toFloat()
+                        v.x = (event.rawX + dX).coerceIn(0f, maxX)
+                        v.y = (event.rawY + dY).coerceIn(0f, maxY)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!moved) openSmartDownloadPicker()
+                    true
+                }
+                else -> false
+            }
         }
     }
 
@@ -268,8 +307,16 @@ class BrowserActivity : AppCompatActivity() {
         val removed = tabs.removeAt(index)
         removed.webView.stopLoading()
         removed.webView.destroy()
-        if (tabs.isEmpty()) openNewTab(searxngBaseUrl)
-        else switchToTab(index.coerceAtMost(tabs.size - 1))
+        if (tabs.isEmpty()) {
+            openNewTab(searxngBaseUrl)
+        } else {
+            val nextIdx = when {
+                activeTabIndex > index -> activeTabIndex - 1
+                activeTabIndex >= tabs.size -> tabs.size - 1
+                else -> activeTabIndex
+            }
+            switchToTab(nextIdx)
+        }
     }
 
     private fun syncNav() {
@@ -280,8 +327,8 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun updateBadge() {
         val count = currentTab()?.let { t -> synchronized(t.streams) { t.streams.size } } ?: 0
-        btnDownloadBadge.text = "⬇ Download ($count)"
-        btnDownloadBadge.isEnabled = true
+        btnFloatingCatcher.text = "⬇ $count"
+        btnFloatingCatcher.setTextColor(Color.parseColor(if (count > 0) "#00FF9C" else "#00E5FF"))
     }
 
     private fun loadInCurrentTab(input: String) {
@@ -294,18 +341,54 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun showTabSwitcher() {
-        val titles = tabs.mapIndexed { i, t ->
-            val mark = if (i == activeTabIndex) "● " else "   "
-            val name = t.webView.title?.take(30)?.ifBlank { null } ?: t.webView.url?.take(30) ?: "New Tab"
-            val cnt = synchronized(t.streams) { t.streams.size }
-            "$mark$name ($cnt)"
-        }.toTypedArray()
+        val listView = ListView(this).apply {
+            divider = null
+            setPadding(18, 12, 18, 8)
+        }
+        var dialog: AlertDialog? = null
 
-        AlertDialog.Builder(this)
+        val adapter = object : BaseAdapter() {
+            override fun getCount() = tabs.size
+            override fun getItem(p: Int) = tabs[p]
+            override fun getItemId(p: Int) = tabs[p].id
+            override fun getView(pos: Int, convertView: View?, parent: ViewGroup): View {
+                val row = convertView ?: LayoutInflater.from(this@BrowserActivity)
+                    .inflate(R.layout.item_tab_row, parent, false)
+                val t = tabs[pos]
+                val isActive = pos == activeTabIndex
+                val title = t.webView.title?.take(34)?.ifBlank { null }
+                    ?: t.webView.url?.take(34)
+                    ?: "New Tab"
+                val cnt = synchronized(t.streams) { t.streams.size }
+
+                val tvTitle = row.findViewById<TextView>(R.id.tvTabTitle)
+                tvTitle.text = if (isActive) "● $title" else title
+                tvTitle.setTextColor(Color.parseColor(if (isActive) "#00E5FF" else "#F0F4FF"))
+                row.findViewById<TextView>(R.id.tvTabStreams).text = "$cnt stream(s) caught"
+
+                row.findViewById<View>(R.id.tabRowInfo).setOnClickListener {
+                    switchToTab(pos)
+                    dialog?.dismiss()
+                }
+                row.findViewById<Button>(R.id.btnKillTab).setOnClickListener {
+                    closeTab(pos)
+                    dialog?.setTitle("Open Windows (${tabs.size})")
+                    notifyDataSetChanged()
+                }
+                return row
+            }
+        }
+        listView.adapter = adapter
+
+        dialog = AlertDialog.Builder(this)
             .setTitle("Open Windows (${tabs.size})")
-            .setItems(titles) { _, which -> switchToTab(which) }
+            .setView(listView)
             .setPositiveButton("+ New Tab") { _, _ -> openNewTab(searxngBaseUrl) }
-            .setNeutralButton("Close Current") { _, _ -> closeTab(activeTabIndex) }
+            .setNeutralButton("Close All") { _, _ ->
+                tabs.forEach { it.webView.stopLoading(); it.webView.destroy() }
+                tabs.clear()
+                openNewTab(searxngBaseUrl)
+            }
             .setNegativeButton("Done", null)
             .show()
     }
