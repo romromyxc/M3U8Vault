@@ -158,7 +158,7 @@ class BrowserActivity : AppCompatActivity() {
         wv.addJavascriptInterface(object {
             @JavascriptInterface
             fun onM3u8Detected(url: String) {
-                if (url.contains(".m3u8", true) && tab.streams.add(url) && currentTab()?.id == tab.id) {
+                if (BrowserHelper.isHlsStream(url) && tab.streams.add(url) && currentTab()?.id == tab.id) {
                     runOnUiThread { updateBadge() }
                 }
             }
@@ -179,7 +179,7 @@ class BrowserActivity : AppCompatActivity() {
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString().orEmpty()
                 val accept = request?.requestHeaders?.get("Accept").orEmpty()
-                if (url.contains(".m3u8", true) || accept.contains("mpegurl", true)) {
+                if (BrowserHelper.isHlsStream(url, accept)) {
                     if (tab.streams.add(url) && currentTab()?.id == tab.id) {
                         runOnUiThread { updateBadge() }
                     }
@@ -236,6 +236,7 @@ class BrowserActivity : AppCompatActivity() {
         tabs.add(tab)
         switchToTab(tabs.size - 1)
         if (!initialUrl.isNullOrBlank()) wv.loadUrl(initialUrl)
+        updateBadge()
         return tab
     }
 
@@ -270,8 +271,8 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun updateBadge() {
         val count = currentTab()?.streams?.size ?: 0
-        btnDownloadBadge.text = "Streams ($count)"
-        btnDownloadBadge.isEnabled = count > 0
+        btnDownloadBadge.text = "Download ($count)"
+        btnDownloadBadge.isEnabled = true
     }
 
     private fun loadInCurrentTab(input: String) {
@@ -334,12 +335,30 @@ class BrowserActivity : AppCompatActivity() {
     private fun showDownloadDialog() {
         val tab = currentTab() ?: return
         val urls = tab.streams.toTypedArray()
-        val checked = BooleanArray(urls.size) { true }
         val title = tab.webView.title?.take(40)?.ifBlank { "Video" } ?: "Video"
         val pageUrl = tab.webView.url.orEmpty()
         val ua = tab.webView.settings.userAgentString
         val cookies = CookieManager.getInstance().getCookie(pageUrl).orEmpty()
 
+        if (urls.isEmpty()) {
+            val input = EditText(this).apply { hint = "Paste .m3u8 URL manually..." }
+            AlertDialog.Builder(this)
+                .setTitle("No Auto-Detected Streams Yet")
+                .setMessage("Press Play on the video first so the player loads the stream, or paste an .m3u8 URL below:")
+                .setView(input)
+                .setPositiveButton("Download URL") { _, _ ->
+                    val manualUrl = input.text.toString().trim()
+                    if (manualUrl.startsWith("http")) {
+                        VaultEngine.enqueueM3u8Download(this, title, manualUrl, StreamHeaders(pageUrl, ua, cookies))
+                        Toast.makeText(this, "Queued to Private Vault", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Close", null)
+                .show()
+            return
+        }
+
+        val checked = BooleanArray(urls.size) { true }
         AlertDialog.Builder(this)
             .setTitle("Download M3U8 (${urls.size})")
             .setMultiChoiceItems(urls, checked) { _, w, c -> checked[w] = c }
@@ -352,6 +371,10 @@ class BrowserActivity : AppCompatActivity() {
                     }
                 }
                 Toast.makeText(this, "Queued $count video(s)", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Paste URL") { _, _ ->
+                tab.streams.clear()
+                showDownloadDialog()
             }
             .setNegativeButton("Cancel", null)
             .show()
