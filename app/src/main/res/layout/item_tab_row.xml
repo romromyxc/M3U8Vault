@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_vault_card"
+    android:layout_marginBottom="6dp"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="8dp">
+
+    <LinearLayout
+        android:id="@+id/tabRowInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/tvTabTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#F0F4FF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvTabStreams"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#7A86B6"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnKillTab"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:minWidth="0dp"
+        android:padding="0dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:background="@drawable/bg_btn_neon_pink"
+        app:backgroundTint="@null"
+        android:text="✕"
+        android:textColor="#FF6EB4"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</LinearLayout>
+<!-- END OF FILE -->
