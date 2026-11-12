@@ -13,8 +13,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.webkit.*
-import android.widget.*
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ProgressBar
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -116,7 +127,9 @@ class BrowserActivity : AppCompatActivity() {
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.hideSoftInputFromWindow(urlBar.windowToken, 0)
                 true
-            } else false
+            } else {
+                false
+            }
         }
 
         btnBack.setOnClickListener {
@@ -202,7 +215,9 @@ class BrowserActivity : AppCompatActivity() {
                     }
                     .show()
                 true
-            } else false
+            } else {
+                false
+            }
         }
 
         wv.addJavascriptInterface(object {
@@ -500,13 +515,4 @@ class BrowserActivity : AppCompatActivity() {
                 var queued = 0
                 urls.forEachIndexed { idx, streamUrl ->
                     if (checked[idx]) {
-                        VaultEngine.enqueueM3u8Download(
-                            context = this,
-                            title = "${pageTitle}_${idx + 1}",
-                            m3u8Url = streamUrl,
-                            headers = StreamHeaders(
-                                referer = currentPageUrl,
-                                userAgent = ua,
-                                cookie = cookies
-                            )
-                        )
+                      
