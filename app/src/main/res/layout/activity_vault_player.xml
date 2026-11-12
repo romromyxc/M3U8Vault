@@ -4,13 +4,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0D0D0D">
+    android:background="#000000">
 
-    <!-- Video Player Container (Expands to Full Screen when toggled) -->
+    <!-- Video Player Container -->
     <FrameLayout
         android:id="@+id/playerContainer"
         android:layout_width="match_parent"
-        android:layout_height="250dp"
+        android:layout_height="240dp"
         android:background="#000000">
 
         <androidx.media3.ui.PlayerView
@@ -20,114 +20,84 @@
             app:show_buffering="when_playing"
             app:use_controller="true" />
 
-        <!-- Top Control Bar: Rewind, Fast Forward, Rotate, Full Screen -->
-        <LinearLayout
+        <!-- Gesture Touch Zone (Leaves top-right buttons & bottom scrubber clickable) -->
+        <View
+            android:id="@+id/gestureOverlay"
             android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="46dp"
+            android:layout_marginBottom="54dp" />
+
+        <!-- Center Floating Feedback Pill (Seek +10s/-10s, Volume %, Brightness %) -->
+        <TextView
+            android:id="@+id/tvGestureHud"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="top"
+            android:layout_gravity="center"
+            android:background="#CC111111"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- Top-Right Compact Rotate & Fullscreen Controls -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
             android:background="#88000000"
-            android:gravity="end|center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="4dp">
-
-            <Button
-                android:id="@+id/btnRewind"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="4dp"
-                android:minWidth="0dp"
-                android:paddingHorizontal="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="⏪ 10s"
-                android:textSize="11sp" />
-
-            <Button
-                android:id="@+id/btnFastForward"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="4dp"
-                android:minWidth="0dp"
-                android:paddingHorizontal="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="⏩ 10s"
-                android:textSize="11sp" />
+            android:padding="2dp">
 
             <Button
                 android:id="@+id/btnRotate"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="4dp"
+                android:layout_width="40dp"
+                android:layout_height="36dp"
                 android:minWidth="0dp"
-                android:paddingHorizontal="8dp"
+                android:padding="0dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
-                android:text="⟳ Rotate"
-                android:textSize="11sp" />
+                android:backgroundTint="#33FFFFFF"
+                android:text="⟳"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp" />
 
             <Button
                 android:id="@+id/btnFullscreen"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_width="40dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
                 android:minWidth="0dp"
-                android:paddingHorizontal="8dp"
+                android:padding="0dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
-                android:text="⛶ Full"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <!-- Right-Side Vertical Volume Slider -->
-        <LinearLayout
-            android:layout_width="40dp"
-            android:layout_height="150dp"
-            android:layout_gravity="end|center_vertical"
-            android:layout_marginEnd="6dp"
-            android:background="#88000000"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingVertical="6dp">
-
-            <TextView
-                android:id="@+id/tvVolumePct"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="80%"
+                android:backgroundTint="#33FFFFFF"
+                android:text="⛶"
                 android:textColor="#FFFFFF"
-                android:textSize="10sp" />
-
-            <SeekBar
-                android:id="@+id/volumeSeekBar"
-                android:layout_width="105dp"
-                android:layout_height="32dp"
-                android:rotation="270" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🔊"
-                android:textSize="12sp" />
+                android:textSize="16sp" />
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Vault List Section (Hidden automatically in Full-Screen Mode) -->
+    <!-- Vault List Section -->
     <LinearLayout
         android:id="@+id/vaultListSection"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:background="#000000">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#161616"
+            android:background="#121212"
             android:paddingHorizontal="12dp"
             android:paddingVertical="8dp"
-            android:text="Private Vault Videos (Tap to Play • Long-Press to Delete)"
-            android:textColor="#CCCCCC"
+            android:text="Downloads &amp; Vault (Tap to Play • Long-Press to Delete)"
+            android:textColor="#B0B0B0"
             android:textSize="12sp" />
 
         <ListView
@@ -135,7 +105,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:divider="#0D0D0D"
+            android:divider="#000000"
             android:dividerHeight="6dp"
             android:padding="8dp" />
     </LinearLayout>
