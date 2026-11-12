@@ -5,6 +5,7 @@ import android.content.*
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Message
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
@@ -15,6 +16,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Collections
+import java.util.concurrent.Executors
 
 class BrowserActivity : AppCompatActivity() {
 
@@ -28,10 +30,8 @@ class BrowserActivity : AppCompatActivity() {
     private lateinit var urlBar: EditText
     private lateinit var pageProgress: ProgressBar
     private lateinit var btnBack: Button
-    private lateinit var btnForward: Button
     private lateinit var btnReload: Button
     private lateinit var btnTabs: Button
-    private lateinit var btnShield: Button
     private lateinit var btnDownloadBadge: Button
 
     private val tabs = mutableListOf<BrowserTab>()
@@ -40,6 +40,7 @@ class BrowserActivity : AppCompatActivity() {
     private var adShieldEnabled = true
     private var desktopMode = false
     private var searxngBaseUrl = "https://searx.be"
+    private val inspectExecutor = Executors.newSingleThreadExecutor()
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -57,10 +58,8 @@ class BrowserActivity : AppCompatActivity() {
         urlBar = findViewById(R.id.urlBar)
         pageProgress = findViewById(R.id.pageProgress)
         btnBack = findViewById(R.id.btnBack)
-        btnForward = findViewById(R.id.btnForward)
         btnReload = findViewById(R.id.btnReload)
         btnTabs = findViewById(R.id.btnTabs)
-        btnShield = findViewById(R.id.btnShield)
         btnDownloadBadge = findViewById(R.id.btnDownloadBadge)
 
         onBackPressedDispatcher.addCallback(this, backCallback)
@@ -69,8 +68,6 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        findViewById<Button>(R.id.btnHome).setOnClickListener { loadInCurrentTab(searxngBaseUrl) }
-
         findViewById<Button>(R.id.btnClearUrl).setOnClickListener {
             urlBar.setText("")
             urlBar.requestFocus()
@@ -93,16 +90,9 @@ class BrowserActivity : AppCompatActivity() {
         }
 
         btnBack.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoBack() }?.goBack() }
-        btnForward.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoForward() }?.goForward() }
         btnTabs.setOnClickListener { showTabSwitcher() }
-
-        btnShield.setOnClickListener {
-            adShieldEnabled = !adShieldEnabled
-            btnShield.text = if (adShieldEnabled) "Shield: ON" else "Shield: OFF"
-        }
-
-        findViewById<Button>(R.id.btnMenu).setOnClickListener { showMenuDialog() }
-        btnDownloadBadge.setOnClickListener { showDownloadDialog() }
+        btnDownloadBadge.setOnClickListener { openSmartDownloadPicker() }
+        findViewById<Button>(R.id.btnMenu).setOnClickListener { showNavigationDrawerMenu() }
         findViewById<Button>(R.id.btnVault).setOnClickListener {
             startActivity(Intent(this, VaultPlayerActivity::class.java))
         }
@@ -142,7 +132,7 @@ class BrowserActivity : AppCompatActivity() {
                     hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE)
             ) {
                 AlertDialog.Builder(this)
-                    .setTitle(link.take(55))
+                    .setTitle(link.take(50))
                     .setItems(arrayOf("Open in New Tab", "Copy Link")) { _, which ->
                         if (which == 0) openNewTab(link)
                         else {
@@ -247,7 +237,7 @@ class BrowserActivity : AppCompatActivity() {
         webContainer.removeAllViews()
         webContainer.addView(tab.webView)
         urlBar.setText(tab.webView.url ?: searxngBaseUrl)
-        btnTabs.text = "Tabs (${tabs.size})"
+        btnTabs.text = "❐ ${tabs.size}"
         updateBadge()
         syncNav()
     }
@@ -262,16 +252,14 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun syncNav() {
-        val wv = currentTab()?.webView
-        val canBack = wv?.canGoBack() == true
+        val canBack = currentTab()?.webView?.canGoBack() == true
         btnBack.isEnabled = canBack
-        btnForward.isEnabled = wv?.canGoForward() == true
         backCallback.isEnabled = canBack || tabs.size > 1
     }
 
     private fun updateBadge() {
         val count = currentTab()?.streams?.size ?: 0
-        btnDownloadBadge.text = "Download ($count)"
+        btnDownloadBadge.text = "⬇ Download ($count)"
         btnDownloadBadge.isEnabled = true
     }
 
@@ -286,101 +274,156 @@ class BrowserActivity : AppCompatActivity() {
     private fun showTabSwitcher() {
         val titles = tabs.mapIndexed { i, t ->
             val mark = if (i == activeTabIndex) "● " else "   "
-            val name = t.webView.title?.take(32)?.ifBlank { null } ?: t.webView.url?.take(32) ?: "New Tab"
+            val name = t.webView.title?.take(30)?.ifBlank { null } ?: t.webView.url?.take(30) ?: "New Tab"
             "$mark$name (${t.streams.size})"
         }.toTypedArray()
 
         AlertDialog.Builder(this)
-            .setTitle("Tabs (${tabs.size})")
+            .setTitle("Open Windows (${tabs.size})")
             .setItems(titles) { _, which -> switchToTab(which) }
             .setPositiveButton("+ New Tab") { _, _ -> openNewTab(searxngBaseUrl) }
-            .setNeutralButton("Close Tab") { _, _ -> closeTab(activeTabIndex) }
+            .setNeutralButton("Close Current") { _, _ -> closeTab(activeTabIndex) }
             .setNegativeButton("Done", null)
             .show()
     }
 
-    private fun showMenuDialog() {
+    private fun showNavigationDrawerMenu() {
+        val wv = currentTab()?.webView
         val items = arrayOf(
-            "+ Open New Tab",
-            if (desktopMode) "✓ Desktop Site" else "Desktop Site",
-            "Change SearXNG Engine",
-            "Clear Tab Streams"
+            if (wv?.canGoForward() == true) "▶ Forward" else "▶ Forward (Disabled)",
+            "⌂ SearXNG Home",
+            "+ New Window / Tab",
+            if (adShieldEnabled) "🛡 Ad & Redirect Shield: ON" else "🛡 Ad & Redirect Shield: OFF",
+            if (desktopMode) "🖥 Desktop Site: ON" else "🖥 Desktop Site: OFF",
+            "🔍 Change SearXNG Engine",
+            "🔗 Paste .m3u8 URL Manually"
         )
+
         AlertDialog.Builder(this)
-            .setTitle("Browser Options")
+            .setTitle("Navigation & Tools")
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> openNewTab(searxngBaseUrl)
-                    1 -> {
-                        desktopMode = !desktopMode
-                        currentTab()?.webView?.apply {
-                            settings.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
-                            reload()
-                        }
+                    0 -> wv?.takeIf { it.canGoForward() }?.goForward()
+                    1 -> loadInCurrentTab(searxngBaseUrl)
+                    2 -> openNewTab(searxngBaseUrl)
+                    3 -> {
+                        adShieldEnabled = !adShieldEnabled
+                        Toast.makeText(this, if (adShieldEnabled) "Shield ON" else "Shield OFF", Toast.LENGTH_SHORT).show()
                     }
-                    2 -> AlertDialog.Builder(this)
-                        .setTitle("SearXNG Instance")
+                    4 -> {
+                        desktopMode = !desktopMode
+                        wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
+                        wv?.reload()
+                    }
+                    5 -> AlertDialog.Builder(this)
+                        .setTitle("Select SearXNG Engine")
                         .setItems(BrowserHelper.SEARXNG_INSTANCES) { _, i ->
                             searxngBaseUrl = BrowserHelper.SEARXNG_INSTANCES[i]
                             loadInCurrentTab(searxngBaseUrl)
                         }.show()
-                    3 -> {
-                        currentTab()?.streams?.clear()
-                        updateBadge()
-                    }
+                    6 -> showManualPasteDialog()
                 }
             }.show()
     }
 
-    private fun showDownloadDialog() {
+    private fun showManualPasteDialog() {
         val tab = currentTab() ?: return
-        val urls = tab.streams.toTypedArray()
-        val title = tab.webView.title?.take(40)?.ifBlank { "Video" } ?: "Video"
         val pageUrl = tab.webView.url.orEmpty()
         val ua = tab.webView.settings.userAgentString
         val cookies = CookieManager.getInstance().getCookie(pageUrl).orEmpty()
+        val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "HLS_Video" } ?: "HLS_Video"
 
-        if (urls.isEmpty()) {
-            val input = EditText(this).apply { hint = "Paste .m3u8 URL manually..." }
-            AlertDialog.Builder(this)
-                .setTitle("No Auto-Detected Streams Yet")
-                .setMessage("Press Play on the video first so the player loads the stream, or paste an .m3u8 URL below:")
-                .setView(input)
-                .setPositiveButton("Download URL") { _, _ ->
-                    val manualUrl = input.text.toString().trim()
-                    if (manualUrl.startsWith("http")) {
-                        VaultEngine.enqueueM3u8Download(this, title, manualUrl, StreamHeaders(pageUrl, ua, cookies))
-                        Toast.makeText(this, "Queued to Private Vault", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .setNegativeButton("Close", null)
-                .show()
-            return
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 20, 36, 10)
         }
+        val etTitle = EditText(this).apply { setText(defaultTitle); hint = "Video title" }
+        val etUrl = EditText(this).apply { hint = "https://.../playlist.m3u8" }
+        box.addView(etTitle)
+        box.addView(etUrl)
 
-        val checked = BooleanArray(urls.size) { true }
         AlertDialog.Builder(this)
-            .setTitle("Download M3U8 (${urls.size})")
-            .setMultiChoiceItems(urls, checked) { _, w, c -> checked[w] = c }
-            .setPositiveButton("Download") { _, _ ->
-                var count = 0
-                urls.forEachIndexed { i, url ->
-                    if (checked[i]) {
-                        VaultEngine.enqueueM3u8Download(this, "${title}_${i + 1}", url, StreamHeaders(pageUrl, ua, cookies))
-                        count++
-                    }
+            .setTitle("Download Direct M3U8 URL")
+            .setView(box)
+            .setPositiveButton("Queue") { _, _ ->
+                val url = etUrl.text.toString().trim()
+                val name = etTitle.text.toString().trim().ifBlank { defaultTitle }
+                if (url.startsWith("http")) {
+                    VaultEngine.enqueueM3u8Download(this, name, url, StreamHeaders(pageUrl, ua, cookies))
+                    Toast.makeText(this, "Queued to Private Vault", Toast.LENGTH_SHORT).show()
                 }
-                Toast.makeText(this, "Queued $count video(s)", Toast.LENGTH_SHORT).show()
-            }
-            .setNeutralButton("Paste URL") { _, _ ->
-                tab.streams.clear()
-                showDownloadDialog()
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
+    private fun openSmartDownloadPicker() {
+        val tab = currentTab() ?: return
+        val rawUrls = tab.streams.toList()
+        if (rawUrls.isEmpty()) {
+            showManualPasteDialog()
+            return
+        }
+
+        val pageUrl = tab.webView.url.orEmpty()
+        val ua = tab.webView.settings.userAgentString
+        val cookies = CookieManager.getInstance().getCookie(pageUrl).orEmpty()
+        val headers = StreamHeaders(pageUrl, ua, cookies)
+        val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "Video" } ?: "Video"
+
+        Toast.makeText(this, "Checking video qualities...", Toast.LENGTH_SHORT).show()
+        inspectExecutor.execute {
+            val options = StreamInspector.inspectAll(rawUrls, headers)
+            runOnUiThread { showCompactStreamDialog(defaultTitle, options, headers) }
+        }
+    }
+
+    private fun showCompactStreamDialog(defaultTitle: String, options: List<StreamOption>, headers: StreamHeaders) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_stream_picker, null)
+        val etTitle = dialogView.findViewById<EditText>(R.id.etCustomVideoTitle)
+        val listView = dialogView.findViewById<ListView>(R.id.lvStreamChoices)
+        etTitle.setText(defaultTitle)
+
+        val adapter = object : BaseAdapter() {
+            override fun getCount() = options.size
+            override fun getItem(p: Int) = options[p]
+            override fun getItemId(p: Int) = p.toLong()
+            override fun getView(pos: Int, convertView: View?, parent: ViewGroup): View {
+                val row = convertView ?: LayoutInflater.from(this@BrowserActivity)
+                    .inflate(R.layout.item_stream_choice, parent, false)
+                val opt = options[pos]
+                row.findViewById<CheckBox>(R.id.cbStreamSelect).isChecked = opt.selected
+                row.findViewById<TextView>(R.id.tvStreamQuality).text = opt.qualityBadge
+                row.findViewById<TextView>(R.id.tvStreamInfo).text = opt.infoLine
+                row.findViewById<TextView>(R.id.tvStreamUrlPreview).text = opt.url
+                return row
+            }
+        }
+        listView.adapter = adapter
+        listView.setOnItemClickListener { _, _, pos, _ ->
+            options[pos].selected = !options[pos].selected
+            adapter.notifyDataSetChanged()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Detected Streams (${options.size})")
+            .setView(dialogView)
+            .setPositiveButton("Download Selected") { _, _ ->
+                val baseName = etTitle.text.toString().trim().ifBlank { defaultTitle }
+                val picked = options.filter { it.selected }
+                picked.forEachIndexed { idx, opt ->
+                    val finalName = if (picked.size > 1) "${baseName}_${idx + 1}" else baseName
+                    VaultEngine.enqueueM3u8Download(this, finalName, opt.url, headers)
+                }
+                Toast.makeText(this, "Queued ${picked.size} video(s) to Vault", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Paste URL") { _, _ -> showManualPasteDialog() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     override fun onDestroy() {
+        inspectExecutor.shutdownNow()
         tabs.forEach { it.webView.destroy() }
         tabs.clear()
         super.onDestroy()
