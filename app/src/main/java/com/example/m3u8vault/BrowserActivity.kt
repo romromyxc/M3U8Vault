@@ -181,7 +181,6 @@ class BrowserActivity : AppCompatActivity() {
 
         val tab = BrowserTab(webView = wv)
 
-        // Long-press links to open in a new tab or copy URL
         wv.setOnLongClickListener {
             val result = wv.hitTestResult
             val linkUrl = result.extra
@@ -206,7 +205,6 @@ class BrowserActivity : AppCompatActivity() {
             } else false
         }
 
-        // JS bridge to catch fetch()/XHR .m3u8 streams before MSE converts them to blob:
         wv.addJavascriptInterface(object {
             @JavascriptInterface
             fun onM3u8Detected(url: String) {
@@ -226,12 +224,10 @@ class BrowserActivity : AppCompatActivity() {
                 val targetUrl = request?.url?.toString().orEmpty()
                 if (targetUrl.isBlank()) return false
 
-                // Block non-http schemes like intent://, market://, tg:// used by ad redirects
                 if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
                     return true
                 }
 
-                // Block ad / betting redirect domains from hijacking the active page
                 if (isAdOrRedirectUrl(targetUrl)) {
                     runOnUiThread {
                         Toast.makeText(this@BrowserActivity, "Blocked ad redirect", Toast.LENGTH_SHORT).show()
@@ -256,7 +252,6 @@ class BrowserActivity : AppCompatActivity() {
                     }
                 }
 
-                // Drop network requests to known ad/tracker servers
                 if (isAdOrRedirectUrl(reqUrl)) {
                     return WebResourceResponse(
                         "text/plain",
@@ -287,7 +282,6 @@ class BrowserActivity : AppCompatActivity() {
                     syncNavigationState()
                 }
 
-                // Hook fetch/XHR for M3U8 detection & neutralize popup window.open ad hijacks
                 view?.evaluateJavascript(
                     """
                     (function() {
@@ -331,7 +325,6 @@ class BrowserActivity : AppCompatActivity() {
                 }
             }
 
-            // Catch target="_blank" / new-window requests safely instead of hijacking the tab
             override fun onCreateWindow(
                 view: WebView?,
                 isDialog: Boolean,
@@ -504,4 +497,16 @@ class BrowserActivity : AppCompatActivity() {
                 checked[which] = isChecked
             }
             .setPositiveButton("Download Selected") { _, _ ->
-                var queued =
+                var queued = 0
+                urls.forEachIndexed { idx, streamUrl ->
+                    if (checked[idx]) {
+                        VaultEngine.enqueueM3u8Download(
+                            context = this,
+                            title = "${pageTitle}_${idx + 1}",
+                            m3u8Url = streamUrl,
+                            headers = StreamHeaders(
+                                referer = currentPageUrl,
+                                userAgent = ua,
+                                cookie = cookies
+                            )
+                        )
