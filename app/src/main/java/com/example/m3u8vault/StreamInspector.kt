@@ -17,51 +17,59 @@ data class StreamOption(
 object StreamInspector {
 
     fun inspectAll(urls: List<String>, headers: StreamHeaders): List<StreamOption> {
-        val results = mutableListOf<StreamOption>()
-        val seen = HashSet<String>()
+        return runCatching {
+            val results = mutableListOf<StreamOption>()
+            val seen = HashSet<String>()
 
-        for (rawUrl in urls) {
-            if (!seen.add(rawUrl)) continue
-            val parsed = inspectSingle(rawUrl, headers)
-            for (item in parsed) {
-                if (seen.add(item.url) || item.url == rawUrl) {
-                    results.add(item)
+            for (rawUrl in urls) {
+                if (rawUrl.isBlank() || !seen.add(rawUrl)) continue
+                val parsed = runCatching { inspectSingle(rawUrl, headers) }
+                    .getOrElse { listOf(fallbackOption(rawUrl)) }
+                for (item in parsed) {
+                    if (seen.add(item.url) || item.url == rawUrl) {
+                        results.add(item)
+                    }
                 }
             }
-        }
 
-        val sorted = results.sortedByDescending { it.sortScore }
-        // Auto-select only the best non-ad quality by default
-        val firstGood = sorted.indexOfFirst { !it.isLikelyAd }
-        sorted.forEachIndexed { idx, opt ->
-            opt.selected = (idx == firstGood) || (firstGood == -1 && idx == 0)
+            if (results.isEmpty()) {
+                urls.filter { it.isNotBlank() }.map { fallbackOption(it) }
+            } else {
+                val sorted = results.sortedByDescending { it.sortScore }
+                val firstGood = sorted.indexOfFirst { !it.isLikelyAd }
+                sorted.forEachIndexed { idx, opt ->
+                    opt.selected = (idx == firstGood) || (firstGood == -1 && idx == 0)
+                }
+                sorted
+            }
+        }.getOrElse {
+            urls.filter { it.isNotBlank() }.map { fallbackOption(it) }
         }
-        return sorted
+    }
+
+    private fun fallbackOption(m3u8Url: String): StreamOption {
+        val guessed = guessQualityFromUrl(m3u8Url)
+        return StreamOption(
+            url = m3u8Url,
+            qualityBadge = guessed.first,
+            infoLine = "HLS Stream • Ready to queue",
+            isLikelyAd = false,
+            sortScore = guessed.second,
+            selected = true
+        )
     }
 
     private fun inspectSingle(m3u8Url: String, headers: StreamHeaders): List<StreamOption> {
         val body = fetchPlaylistText(m3u8Url, headers)
         if (body.isNullOrBlank() || !body.contains("#EXTM3U")) {
-            val guessed = guessQualityFromUrl(m3u8Url)
-            return listOf(
-                StreamOption(
-                    url = m3u8Url,
-                    qualityBadge = guessed.first,
-                    infoLine = "HLS Stream • Ready to queue",
-                    isLikelyAd = false,
-                    sortScore = guessed.second,
-                    selected = true
-                )
-            )
+            return listOf(fallbackOption(m3u8Url))
         }
 
-        // Master Playlist: extract every individual resolution variant (1080p, 720p, 480p...)
         if (body.contains("#EXT-X-STREAM-INF")) {
             val variants = parseMasterVariants(m3u8Url, body)
             if (variants.isNotEmpty()) return variants
         }
 
-        // Media Playlist: compute total duration & segment count
         var totalSec = 0.0
         var segments = 0
         for (line in body.lines()) {
@@ -101,8 +109,9 @@ object StreamInspector {
         for (i in lines.indices) {
             val line = lines[i].trim()
             if (!line.startsWith("#EXT-X-STREAM-INF:")) continue
-            val nextUri = lines.drop(i + 1).firstOrNull { it.trim().isNotEmpty() && !it.trim().startsWith("#") }?.trim()
-                ?: continue
+            val nextUri = lines.drop(i + 1)
+                .firstOrNull { it.trim().isNotEmpty() && !it.trim().startsWith("#") }
+                ?.trim() ?: continue
 
             val resolvedUrl = resolveUrl(baseUrl, nextUri)
             val resMatch = Regex("RESOLUTION=(\\d+)x(\\d+)").find(line)
@@ -159,7 +168,8 @@ object StreamInspector {
     private fun resolveUrl(base: String, relative: String): String {
         if (relative.startsWith("http://") || relative.startsWith("https://")) return relative
         return runCatching { URL(URL(base), relative).toString() }.getOrElse {
-            Uri.parse(base).buildUpon().path(relative).build().toString()
+            runCatching { Uri.parse(base).buildUpon().path(relative).build().toString() }
+                .getOrDefault(relative)
         }
     }
 
