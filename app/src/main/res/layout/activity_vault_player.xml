@@ -6,20 +6,138 @@
     android:orientation="vertical"
     android:background="#0D0D0D">
 
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/playerView"
+    <!-- Video Player Container (Expands to Full Screen when toggled) -->
+    <FrameLayout
+        android:id="@+id/playerContainer"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
-        android:background="#000000"
-        app:show_buffering="when_playing"
-        app:use_controller="true" />
+        android:layout_height="250dp"
+        android:background="#000000">
 
-    <ListView
-        android:id="@+id/downloadListView"
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/playerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:show_buffering="when_playing"
+            app:use_controller="true" />
+
+        <!-- Top Control Bar: Rewind, Fast Forward, Rotate, Full Screen -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="#88000000"
+            android:gravity="end|center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp">
+
+            <Button
+                android:id="@+id/btnRewind"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="4dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="⏪ 10s"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnFastForward"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="4dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="⏩ 10s"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnRotate"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="4dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="⟳ Rotate"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnFullscreen"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="⛶ Full"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Right-Side Vertical Volume Slider -->
+        <LinearLayout
+            android:layout_width="40dp"
+            android:layout_height="150dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="6dp"
+            android:background="#88000000"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingVertical="6dp">
+
+            <TextView
+                android:id="@+id/tvVolumePct"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="80%"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp" />
+
+            <SeekBar
+                android:id="@+id/volumeSeekBar"
+                android:layout_width="105dp"
+                android:layout_height="32dp"
+                android:rotation="270" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔊"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Vault List Section (Hidden automatically in Full-Screen Mode) -->
+    <LinearLayout
+        android:id="@+id/vaultListSection"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:divider="#262626"
-        android:dividerHeight="1dp"
-        android:padding="8dp" />
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#161616"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:text="Private Vault Videos (Tap to Play • Long-Press to Delete)"
+            android:textColor="#CCCCCC"
+            android:textSize="12sp" />
+
+        <ListView
+            android:id="@+id/downloadListView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:divider="#0D0D0D"
+            android:dividerHeight="6dp"
+            android:padding="8dp" />
+    </LinearLayout>
 </LinearLayout>
+<!-- END OF FILE -->
