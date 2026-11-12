@@ -23,6 +23,7 @@ class BrowserActivity : AppCompatActivity() {
     private data class BrowserTab(
         val id: Long = System.nanoTime(),
         val webView: WebView,
+        var lastUrl: String = "",
         val streams: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
     )
 
@@ -106,6 +107,18 @@ class BrowserActivity : AppCompatActivity() {
         return runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull().orEmpty()
     }
 
+    private fun resetStreamsIfUrlChanged(tab: BrowserTab, newUrl: String?) {
+        val clean = newUrl?.substringBefore("#")?.trim().orEmpty()
+        if (clean.isBlank() || !clean.startsWith("http")) return
+        if (tab.lastUrl != clean) {
+            tab.lastUrl = clean
+            synchronized(tab.streams) { tab.streams.clear() }
+            if (currentTab()?.id == tab.id) {
+                runOnUiThread { updateBadge() }
+            }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun openNewTab(initialUrl: String? = searxngBaseUrl): BrowserTab {
         val wv = WebView(this).apply {
@@ -154,8 +167,14 @@ class BrowserActivity : AppCompatActivity() {
         wv.addJavascriptInterface(object {
             @JavascriptInterface
             fun onM3u8Detected(url: String) {
-                if (BrowserHelper.isHlsStream(url) && tab.streams.add(url) && currentTab()?.id == tab.id) {
-                    runOnUiThread { updateBadge() }
+                if (BrowserHelper.isHlsStream(url)) {
+                    val added = synchronized(tab.streams) {
+                        tab.streams.remove(url)
+                        tab.streams.add(url)
+                    }
+                    if (added && currentTab()?.id == tab.id) {
+                        runOnUiThread { updateBadge() }
+                    }
                 }
             }
         }, "VaultSniffer")
@@ -176,7 +195,11 @@ class BrowserActivity : AppCompatActivity() {
                 val url = request?.url?.toString().orEmpty()
                 val accept = request?.requestHeaders?.get("Accept").orEmpty()
                 if (BrowserHelper.isHlsStream(url, accept)) {
-                    if (tab.streams.add(url) && currentTab()?.id == tab.id) {
+                    val added = synchronized(tab.streams) {
+                        tab.streams.remove(url)
+                        tab.streams.add(url)
+                    }
+                    if (added && currentTab()?.id == tab.id) {
                         runOnUiThread { updateBadge() }
                     }
                 }
@@ -185,6 +208,7 @@ class BrowserActivity : AppCompatActivity() {
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                resetStreamsIfUrlChanged(tab, url)
                 if (currentTab()?.id == tab.id) {
                     isPageLoading = true
                     btnReload.text = "✕"
@@ -206,6 +230,7 @@ class BrowserActivity : AppCompatActivity() {
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                resetStreamsIfUrlChanged(tab, url)
                 if (currentTab()?.id == tab.id) syncNav()
             }
         }
@@ -274,7 +299,8 @@ class BrowserActivity : AppCompatActivity() {
     private fun loadInCurrentTab(input: String) {
         if (input.isBlank()) return
         val tab = currentTab() ?: return
-        tab.streams.clear()
+        synchronized(tab.streams) { tab.streams.clear() }
+        tab.lastUrl = ""
         updateBadge()
         tab.webView.loadUrl(BrowserHelper.resolveInput(input, searxngBaseUrl))
     }
@@ -305,7 +331,8 @@ class BrowserActivity : AppCompatActivity() {
             if (adShieldEnabled) "🛡 Ad & Redirect Shield: ON" else "🛡 Ad & Redirect Shield: OFF",
             if (desktopMode) "🖥 Desktop Site: ON" else "🖥 Desktop Site: OFF",
             "🔍 Change SearXNG Engine",
-            "🔗 Paste .m3u8 URL Manually"
+            "🔗 Paste .m3u8 URL Manually",
+            "🧹 Clear Detected Streams"
         )
 
         AlertDialog.Builder(this)
@@ -331,6 +358,11 @@ class BrowserActivity : AppCompatActivity() {
                             loadInCurrentTab(searxngBaseUrl)
                         }.show()
                     6 -> showManualPasteDialog()
+                    7 -> {
+                        synchronized(currentTab()?.streams ?: mutableSetOf()) { currentTab()?.streams?.clear() }
+                        updateBadge()
+                        Toast.makeText(this, "Stream list cleared", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }.show()
     }
@@ -360,7 +392,7 @@ class BrowserActivity : AppCompatActivity() {
                 if (url.startsWith("http")) {
                     runCatching {
                         VaultEngine.enqueueM3u8Download(this, name, url, StreamHeaders(pageUrl, ua, cookies))
-                        Toast.makeText(this, "Queued to Private Vault", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Added to Downloading", Toast.LENGTH_SHORT).show()
                     }.onFailure {
                         Toast.makeText(this, "Queue error: ${it.message}", Toast.LENGTH_LONG).show()
                     }
@@ -373,7 +405,7 @@ class BrowserActivity : AppCompatActivity() {
     private fun openSmartDownloadPicker() {
         if (isInspectingStreams) return
         val tab = currentTab() ?: return
-        val rawUrls = synchronized(tab.streams) { tab.streams.toList() }
+        val rawUrls = synchronized(tab.streams) { tab.streams.toList().reversed() }
         if (rawUrls.isEmpty()) {
             showManualPasteDialog()
             return
@@ -393,13 +425,18 @@ class BrowserActivity : AppCompatActivity() {
             runOnUiThread {
                 isInspectingStreams = false
                 if (!isFinishing && !isDestroyed) {
-                    showCompactStreamDialog(defaultTitle, options, headers)
+                    showCompactStreamDialog(tab, defaultTitle, options, headers)
                 }
             }
         }
     }
 
-    private fun showCompactStreamDialog(defaultTitle: String, options: List<StreamOption>, headers: StreamHeaders) {
+    private fun showCompactStreamDialog(
+        tab: BrowserTab,
+        defaultTitle: String,
+        options: List<StreamOption>,
+        headers: StreamHeaders
+    ) {
         try {
             val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_stream_picker, null)
             val etTitle = dialogView.findViewById<EditText>(R.id.etCustomVideoTitle)
@@ -438,12 +475,16 @@ class BrowserActivity : AppCompatActivity() {
                             val finalName = if (picked.size > 1) "${baseName}_${idx + 1}" else baseName
                             VaultEngine.enqueueM3u8Download(this, finalName, opt.url, headers)
                         }
-                        Toast.makeText(this, "Queued ${picked.size} video(s) to Vault", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Added ${picked.size} video(s) to Downloading", Toast.LENGTH_SHORT).show()
                     }.onFailure {
                         Toast.makeText(this, "Queue error: ${it.message}", Toast.LENGTH_LONG).show()
                     }
                 }
-                .setNeutralButton("Paste URL") { _, _ -> showManualPasteDialog() }
+                .setNeutralButton("Clear List") { _, _ ->
+                    synchronized(tab.streams) { tab.streams.clear() }
+                    updateBadge()
+                    Toast.makeText(this, "Cleared old streams", Toast.LENGTH_SHORT).show()
+                }
                 .setNegativeButton("Cancel", null)
                 .show()
         } catch (e: Exception) {
