@@ -6,12 +6,63 @@
     android:orientation="vertical"
     android:background="#06070D">
 
-    <!-- Video Player Container -->
+    <!-- Vault Header Bar with Online Stream Button -->
+    <LinearLayout
+        android:id="@+id/vaultHeaderBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="8dp"
+        android:background="#0A0D18">
+
+        <Button
+            android:id="@+id/btnBackBrowser"
+            android:layout_width="38dp"
+            android:layout_height="36dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_dark"
+            app:backgroundTint="@null"
+            android:text="◀"
+            android:textColor="#00E5FF"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:text="⚡ PRIVATE VAULT"
+            android:textColor="#F0F4FF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnStreamOnline"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:paddingHorizontal="12dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:background="@drawable/bg_btn_neon_cyan"
+            app:backgroundTint="@null"
+            android:text="+ Stream URL"
+            android:textColor="#00E5FF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- On-Demand ExoPlayer Container (Hidden until you play a video or stream a URL) -->
     <FrameLayout
         android:id="@+id/playerContainer"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
-        android:background="#000000">
+        android:layout_height="235dp"
+        android:background="#000000"
+        android:visibility="gone">
 
         <androidx.media3.ui.PlayerView
             android:id="@+id/playerView"
@@ -20,15 +71,15 @@
             app:show_buffering="when_playing"
             app:use_controller="true" />
 
-        <!-- Gesture Touch Zone (Double-tap left/right to seek, swipe up/down for volume/brightness) -->
+        <!-- Gesture Overlay (Double-tap seek ±10s, swipe right volume, swipe left brightness) -->
         <View
             android:id="@+id/gestureOverlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="48dp"
+            android:layout_marginTop="46dp"
             android:layout_marginBottom="54dp" />
 
-        <!-- Center Neon HUD Pill -->
+        <!-- Center Neon Feedback Pill -->
         <TextView
             android:id="@+id/tvGestureHud"
             android:layout_width="wrap_content"
@@ -42,18 +93,50 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- Top-Right Neon Rotate & Fullscreen Pill -->
+        <!-- Top-Right Player Controls: HD Quality | Speed | Rotate | Fullscreen | Close -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|end"
-            android:layout_margin="8dp"
+            android:layout_margin="6dp"
             android:orientation="horizontal">
 
             <Button
+                android:id="@+id/btnQuality"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:minWidth="42dp"
+                android:paddingHorizontal="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_btn_neon_dark"
+                app:backgroundTint="@null"
+                android:text="HD"
+                android:textColor="#00FF9C"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnSpeed"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="4dp"
+                android:minWidth="44dp"
+                android:paddingHorizontal="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_btn_neon_dark"
+                app:backgroundTint="@null"
+                android:text="1.0x"
+                android:textColor="#BB9AF7"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Button
                 android:id="@+id/btnRotate"
-                android:layout_width="40dp"
-                android:layout_height="36dp"
+                android:layout_width="36dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="4dp"
                 android:minWidth="0dp"
                 android:padding="0dp"
                 android:insetTop="0dp"
@@ -62,32 +145,42 @@
                 app:backgroundTint="@null"
                 android:text="⟳"
                 android:textColor="#00E5FF"
-                android:textSize="17sp" />
+                android:textSize="16sp" />
 
             <Button
                 android:id="@+id/btnFullscreen"
-                android:layout_width="40dp"
-                android:layout_height="36dp"
-                android:layout_marginStart="6dp"
+                android:layout_width="36dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="4dp"
+                android:minWidth="0dp"
+                android:padding="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_btn_neon_dark"
+                app:backgroundTint="@null"
+                android:text="⛶"
+                android:textColor="#00E5FF"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/btnClosePlayer"
+                android:layout_width="36dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="4dp"
                 android:minWidth="0dp"
                 android:padding="0dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:background="@drawable/bg_btn_neon_pink"
                 app:backgroundTint="@null"
-                android:text="⛶"
+                android:text="✕"
                 android:textColor="#FF6EB4"
-                android:textSize="16sp" />
+                android:textSize="14sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Neon Divider Line -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1.5dp"
-        android:background="#FF2A85" />
-
-    <!-- Vault List Section -->
+    <!-- 2 Separate List Tabs: Queue & Downloading vs Downloaded -->
     <LinearLayout
         android:id="@+id/vaultListSection"
         android:layout_width="match_parent"
@@ -96,16 +189,55 @@
         android:orientation="vertical"
         android:background="#06070D">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#0B0E1A"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="9dp"
-            android:text="⚡ TOKYO VAULT  •  Tap to Play  •  Long-Press to Delete"
-            android:textColor="#BB9AF7"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="4dp">
+
+            <Button
+                android:id="@+id/btnTabQueue"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="5dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_tab_inactive"
+                app:backgroundTint="@null"
+                android:text="⬇ Queue (0)"
+                android:textColor="#00E5FF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnTabDone"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="5dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_tab_active"
+                app:backgroundTint="@null"
+                android:text="✔ Downloaded (0)"
+                android:textColor="#00FF9C"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvEmptyVault"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="28dp"
+            android:text="No videos in this list yet."
+            android:textColor="#68749C"
+            android:textSize="13sp"
+            android:visibility="gone" />
 
         <ListView
             android:id="@+id/downloadListView"
