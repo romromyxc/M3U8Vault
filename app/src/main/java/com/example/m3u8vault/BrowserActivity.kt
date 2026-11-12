@@ -5,9 +5,7 @@ import android.content.*
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Message
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
@@ -41,7 +39,7 @@ class BrowserActivity : AppCompatActivity() {
     private var adShieldEnabled = true
     private var desktopMode = false
     private var searxngBaseUrl = "https://searx.be"
-    private var isInspectingStreams = false
+    private var isInspecting = false
     private val inspectExecutor = Executors.newSingleThreadExecutor()
 
     private val backCallback = object : OnBackPressedCallback(false) {
@@ -103,20 +101,16 @@ class BrowserActivity : AppCompatActivity() {
     private fun currentTab(): BrowserTab? = tabs.getOrNull(activeTabIndex)
 
     private fun safeCookies(url: String): String {
-        if (url.isBlank() || !url.startsWith("http")) return ""
+        if (!url.startsWith("http")) return ""
         return runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull().orEmpty()
     }
 
     private fun resetStreamsIfUrlChanged(tab: BrowserTab, newUrl: String?) {
         val clean = newUrl?.substringBefore("#")?.trim().orEmpty()
-        if (clean.isBlank() || !clean.startsWith("http")) return
-        if (tab.lastUrl != clean) {
-            tab.lastUrl = clean
-            synchronized(tab.streams) { tab.streams.clear() }
-            if (currentTab()?.id == tab.id) {
-                runOnUiThread { updateBadge() }
-            }
-        }
+        if (!clean.startsWith("http") || tab.lastUrl == clean) return
+        tab.lastUrl = clean
+        synchronized(tab.streams) { tab.streams.clear() }
+        if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -168,13 +162,11 @@ class BrowserActivity : AppCompatActivity() {
             @JavascriptInterface
             fun onM3u8Detected(url: String) {
                 if (BrowserHelper.isHlsStream(url)) {
-                    val added = synchronized(tab.streams) {
+                    synchronized(tab.streams) {
                         tab.streams.remove(url)
                         tab.streams.add(url)
                     }
-                    if (added && currentTab()?.id == tab.id) {
-                        runOnUiThread { updateBadge() }
-                    }
+                    if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
                 }
             }
         }, "VaultSniffer")
@@ -195,13 +187,11 @@ class BrowserActivity : AppCompatActivity() {
                 val url = request?.url?.toString().orEmpty()
                 val accept = request?.requestHeaders?.get("Accept").orEmpty()
                 if (BrowserHelper.isHlsStream(url, accept)) {
-                    val added = synchronized(tab.streams) {
+                    synchronized(tab.streams) {
                         tab.streams.remove(url)
                         tab.streams.add(url)
                     }
-                    if (added && currentTab()?.id == tab.id) {
-                        runOnUiThread { updateBadge() }
-                    }
+                    if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
                 }
                 if (BrowserHelper.isAdUrl(url, adShieldEnabled)) return BrowserHelper.emptyResponse()
                 return super.shouldInterceptRequest(view, request)
@@ -289,9 +279,7 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun updateBadge() {
-        val count = synchronized(currentTab()?.streams ?: emptySet<String>()) {
-            currentTab()?.streams?.size ?: 0
-        }
+        val count = currentTab()?.let { t -> synchronized(t.streams) { t.streams.size } } ?: 0
         btnDownloadBadge.text = "⬇ Download ($count)"
         btnDownloadBadge.isEnabled = true
     }
@@ -359,7 +347,7 @@ class BrowserActivity : AppCompatActivity() {
                         }.show()
                     6 -> showManualPasteDialog()
                     7 -> {
-                        synchronized(currentTab()?.streams ?: mutableSetOf()) { currentTab()?.streams?.clear() }
+                        currentTab()?.let { t -> synchronized(t.streams) { t.streams.clear() } }
                         updateBadge()
                         Toast.makeText(this, "Stream list cleared", Toast.LENGTH_SHORT).show()
                     }
@@ -403,7 +391,7 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun openSmartDownloadPicker() {
-        if (isInspectingStreams) return
+        if (isInspecting) return
         val tab = currentTab() ?: return
         val rawUrls = synchronized(tab.streams) { tab.streams.toList().reversed() }
         if (rawUrls.isEmpty()) {
@@ -417,16 +405,14 @@ class BrowserActivity : AppCompatActivity() {
         val headers = StreamHeaders(pageUrl, ua, cookies)
         val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "Video" } ?: "Video"
 
-        isInspectingStreams = true
+        isInspecting = true
         Toast.makeText(this, "Checking video qualities...", Toast.LENGTH_SHORT).show()
 
         inspectExecutor.execute {
             val options = StreamInspector.inspectAll(rawUrls, headers)
             runOnUiThread {
-                isInspectingStreams = false
-                if (!isFinishing && !isDestroyed) {
-                    showCompactStreamDialog(tab, defaultTitle, options, headers)
-                }
+                isInspecting = false
+                if (!isFinishing && !isDestroyed) showCompactStreamDialog(tab, defaultTitle, options, headers)
             }
         }
     }
