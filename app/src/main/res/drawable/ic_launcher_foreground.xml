@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Neon Magenta Play Triangle -->
+    <path
+        android:strokeColor="#FF2A85"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:fillColor="#160D24"
+        android:pathData="M34,27 L82,54 L34,81 Z" />
+    <!-- Inner Neon Cyan Download Arrow -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M49,39 L55,39 L55,54 L63,54 L52,66 L41,54 L49,54 Z" />
+</vector>
+<!-- END OF FILE -->
