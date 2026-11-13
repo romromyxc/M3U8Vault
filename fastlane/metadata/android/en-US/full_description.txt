@@ -1,0 +1,7 @@
+M3U8Vault is an open-source Android web browser, HLS (.m3u8) stream inspector, and offline media player built with Jetpack Media3.
+
+Key Features:
+* Multi-Tab Browser: Browse with SearXNG search integration, built-in ad/redirect filtering, desktop site toggle, and individual tab management.
+* Floating Stream Catcher & Quality Picker: Detects HLS (.m3u8) playlists on webpages, inspects available resolutions (1080p, 720p, 480p), flags short ad clips, and lets you rename files before downloading.
+* Parallel Offline Downloader: Downloads HLS segments concurrently with live speed, remaining time estimates, pause/resume controls, and separate Downloading and Videos tabs.
+* Gesture Video Player: On-demand ExoPlayer supporting double-tap seek, swipe volume/brightness gestures, playback speed control (1.0x to 2.0x), quality switching, and automatic playback position resume.
