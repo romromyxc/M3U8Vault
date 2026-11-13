@@ -1,0 +1,4 @@
+Initial release of M3U8Vault:
+- Multi-tab browser with floating draggable HLS stream catcher
+- Stream quality inspector and parallel M3U8 downloader
+- On-demand Media3 ExoPlayer with gesture controls and playback resume
