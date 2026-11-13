@@ -11,10 +11,10 @@ object BrowserHelper {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
     val SEARXNG_INSTANCES = arrayOf(
-        "https://searx.be",
-        "https://search.sapti.me",
-        "https://paulgo.io",
-        "https://searx.tiekoetter.com"
+        "https://4get.ca",
+        "https://4get.zzls.xyz",
+        "https://4get.sijh.net",
+        "https://4get.edmateo.site"
     )
 
     private val blockedKeywords = listOf(
@@ -39,10 +39,10 @@ object BrowserHelper {
             return false
         }
         return u.contains(".m3u8") ||
-            acceptHeader.lowercase().contains("mpegurl") ||
-            u.contains("chunklist") ||
-            u.contains("master.txt") ||
-            u.contains("/hls/") && u.contains("manifest")
+                acceptHeader.lowercase().contains("mpegurl") ||
+                u.contains("chunklist") ||
+                u.contains("master.txt") ||
+                u.contains("/hls/") && u.contains("manifest")
     }
 
     fun emptyResponse(): WebResourceResponse =
@@ -51,7 +51,7 @@ object BrowserHelper {
     fun resolveInput(input: String, searxngBase: String): String = when {
         input.startsWith("http://") || input.startsWith("https://") -> input
         input.contains(".") && !input.contains(" ") -> "https://$input"
-        else -> "$searxngBase/search?q=${Uri.encode(input)}&safesearch=0"
+        else -> "$searxngBase/web?s=${Uri.encode(input)}&nsfw=yes"
     }
 
     val HOOK_JS = """
