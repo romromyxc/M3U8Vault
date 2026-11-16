@@ -68,8 +68,8 @@ object VaultEngine {
         }
     }
 
-    private fun persistHeaders(context: Context, m3u8Url: String, headers: StreamHeaders) {
-        headerRegistry[m3u8Url] = headers
+    private fun persistHeaders(context: Context, streamUrl: String, headers: StreamHeaders) {
+        headerRegistry[streamUrl] = headers
         val json = JSONObject().apply {
             put("r", headers.referer)
             put("u", headers.userAgent)
@@ -78,7 +78,7 @@ object VaultEngine {
         context.applicationContext
             .getSharedPreferences(PREFS_HEADERS, Context.MODE_PRIVATE)
             .edit()
-            .putString(m3u8Url, json)
+            .putString(streamUrl, json)
             .apply()
     }
 
@@ -138,8 +138,8 @@ object VaultEngine {
             .addInterceptor { chain ->
                 val original = chain.request()
                 val urlStr = original.url.toString()
-                val matched = headerRegistry.entries.firstOrNull { (m3u8Url, _) ->
-                    urlStr == m3u8Url || original.url.host == Uri.parse(m3u8Url).host
+                val matched = headerRegistry.entries.firstOrNull { (savedUrl, _) ->
+                    urlStr == savedUrl || original.url.host == Uri.parse(savedUrl).host
                 }?.value
 
                 val builder = original.newBuilder()
@@ -207,6 +207,32 @@ object VaultEngine {
         DownloadService.sendAddDownload(context, VaultDownloadService::class.java, request, true)
     }
 
+    fun enqueueDirectVideoDownload(
+        context: Context,
+        title: String,
+        videoUrl: String,
+        mimeType: String? = null,
+        headers: StreamHeaders
+    ) {
+        ensureNotificationChannel(context)
+        persistHeaders(context, videoUrl, headers)
+
+        val uniqueId = "${System.currentTimeMillis()}_${videoUrl.hashCode()}"
+        val cleanMime = when {
+            mimeType.isNullOrBlank() || mimeType.equals("application/octet-stream", ignoreCase = true) -> null
+            mimeType.lowercase().startsWith("video/") -> mimeType
+            else -> null
+        }
+
+        val builder = DownloadRequest.Builder(uniqueId, Uri.parse(videoUrl))
+            .setData(title.toByteArray(Charsets.UTF_8))
+        if (cleanMime != null) {
+            builder.setMimeType(cleanMime)
+        }
+
+        DownloadService.sendAddDownload(context, VaultDownloadService::class.java, builder.build(), true)
+    }
+
     fun pauseDownload(context: Context, id: String) {
         DownloadService.sendSetStopReason(context, VaultDownloadService::class.java, id, STOP_REASON_PAUSED, false)
     }
@@ -227,12 +253,16 @@ object VaultEngine {
     }
 
     fun buildMediaItem(url: String, title: String, cacheKey: String? = null): MediaItem {
-        return MediaItem.Builder()
+        val lower = url.lowercase()
+        val isHls = lower.contains(".m3u8") || lower.contains("chunklist") || lower.contains("master.txt")
+        val builder = MediaItem.Builder()
             .setUri(url)
             .setMediaId(cacheKey ?: url)
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
-            .build()
+        if (isHls) {
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
+        return builder.build()
     }
 }
 
@@ -259,7 +289,7 @@ class VaultDownloadService : DownloadService(
             this,
             android.R.drawable.stat_sys_download,
             null,
-            "Downloading ${downloads.size} HLS video(s)",
+            "Downloading ${downloads.size} video(s)",
             downloads,
             notMetRequirements
         )
