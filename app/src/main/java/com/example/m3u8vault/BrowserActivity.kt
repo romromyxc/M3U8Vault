@@ -5,12 +5,15 @@ import android.app.DownloadManager
 import android.content.*
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -43,12 +46,14 @@ class BrowserActivity : AppCompatActivity() {
         val sortHeight: Int = 0
     )
 
+    private lateinit var canvasWrapper: FrameLayout
     private lateinit var webContainer: FrameLayout
     private lateinit var urlBar: EditText
     private lateinit var pageProgress: ProgressBar
     private lateinit var btnBack: Button
+    private lateinit var btnForward: Button
     private lateinit var btnReload: Button
-    private lateinit var btnTabs: Button
+    private lateinit var btnTabs: TextView
     private lateinit var btnFloatingCatcher: Button
 
     private val tabs = mutableListOf<BrowserTab>()
@@ -70,32 +75,80 @@ class BrowserActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = Color.parseColor("#1E1E2E")
+        window.navigationBarColor = Color.parseColor("#1E1E2E")
         setContentView(R.layout.activity_browser)
 
+        canvasWrapper = findViewById(R.id.canvasWrapper)
         webContainer = findViewById(R.id.webContainer)
         urlBar = findViewById(R.id.urlBar)
         pageProgress = findViewById(R.id.pageProgress)
         btnBack = findViewById(R.id.btnBack)
+        btnForward = findViewById(R.id.btnForward)
         btnReload = findViewById(R.id.btnReload)
         btnTabs = findViewById(R.id.btnTabs)
         btnFloatingCatcher = findViewById(R.id.btnFloatingCatcher)
 
+        applyCatppuccinMochaShapes()
         onBackPressedDispatcher.addCallback(this, backCallback)
         setupListeners()
         setupFloatingCatcher()
         openNewTab(searxngBaseUrl)
     }
 
-    private fun setupListeners() {
-        findViewById<Button>(R.id.btnClearUrl).setOnClickListener {
-            urlBar.setText("")
-            urlBar.requestFocus()
-            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-                .showSoftInput(urlBar, InputMethodManager.SHOW_IMPLICIT)
+    private fun dp(value: Float): Float = value * resources.displayMetrics.density
+
+    private fun applyCatppuccinMochaShapes() {
+        findViewById<View>(R.id.searchPillContainer).background = GradientDrawable().apply {
+            setColor(Color.parseColor("#313244"))
+            cornerRadius = dp(20f)
         }
 
+        btnFloatingCatcher.background = GradientDrawable().apply {
+            setColor(Color.parseColor("#A6E3A1"))
+            cornerRadius = dp(21f)
+        }
+
+        btnTabs.background = GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            cornerRadius = dp(5f)
+            setStroke(dp(1.5f).toInt(), Color.parseColor("#CDD6F4"))
+        }
+    }
+
+    private fun syncSmartTopButton() {
+        val editingWithText = urlBar.hasFocus() && !urlBar.text.isNullOrEmpty()
+        btnReload.text = when {
+            editingWithText -> "✕"
+            isPageLoading -> "✕"
+            else -> "↻"
+        }
+    }
+
+    private fun setupListeners() {
+        urlBar.setOnFocusChangeListener { _, _ ->
+            syncSmartTopButton()
+        }
+
+        urlBar.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                syncSmartTopButton()
+            }
+        })
+
+        // 2-in-1 Button: Clear when typing, Stop when loading, Reload when idle
         btnReload.setOnClickListener {
-            currentTab()?.webView?.let { if (isPageLoading) it.stopLoading() else it.reload() }
+            if (urlBar.hasFocus() && !urlBar.text.isNullOrEmpty()) {
+                urlBar.setText("")
+                urlBar.requestFocus()
+                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                    .showSoftInput(urlBar, InputMethodManager.SHOW_IMPLICIT)
+                syncSmartTopButton()
+            } else {
+                currentTab()?.webView?.let { if (isPageLoading) it.stopLoading() else it.reload() }
+            }
         }
 
         urlBar.setOnEditorActionListener { _, actionId, _ ->
@@ -104,12 +157,22 @@ class BrowserActivity : AppCompatActivity() {
                 urlBar.clearFocus()
                 (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
                     .hideSoftInputFromWindow(urlBar.windowToken, 0)
+                syncSmartTopButton()
                 true
             } else false
         }
 
         btnBack.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoBack() }?.goBack() }
-        btnTabs.setOnClickListener { showTabSwitcher() }
+        btnForward.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoForward() }?.goForward() }
+
+        val tabSlot = findViewById<View>(R.id.tabSlot)
+        tabSlot.setOnClickListener { showTabSwitcher() }
+        tabSlot.setOnLongClickListener {
+            openNewTab(searxngBaseUrl)
+            Toast.makeText(this, "New tab opened", Toast.LENGTH_SHORT).show()
+            true
+        }
+
         findViewById<Button>(R.id.btnMenu).setOnClickListener { showNavigationDrawerMenu() }
         findViewById<Button>(R.id.btnVault).setOnClickListener {
             startActivity(Intent(this, VaultPlayerActivity::class.java))
@@ -137,8 +200,8 @@ class BrowserActivity : AppCompatActivity() {
                 MotionEvent.ACTION_MOVE -> {
                     if (abs(event.rawX - downX) > 12f || abs(event.rawY - downY) > 12f) {
                         moved = true
-                        val maxX = (webContainer.width - v.width).coerceAtLeast(0).toFloat()
-                        val maxY = (webContainer.height - v.height).coerceAtLeast(0).toFloat()
+                        val maxX = (canvasWrapper.width - v.width).coerceAtLeast(0).toFloat()
+                        val maxY = (canvasWrapper.height - v.height).coerceAtLeast(0).toFloat()
                         v.x = (event.rawX + dX).coerceIn(0f, maxX)
                         v.y = (event.rawY + dY).coerceIn(0f, maxY)
                     }
@@ -190,6 +253,7 @@ class BrowserActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            setBackgroundColor(Color.parseColor("#1E1E2E"))
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -337,9 +401,9 @@ class BrowserActivity : AppCompatActivity() {
                 resetStreamsIfUrlChanged(tab, url)
                 if (currentTab()?.id == tab.id) {
                     isPageLoading = true
-                    btnReload.text = "✕"
+                    syncSmartTopButton()
                     pageProgress.visibility = View.VISIBLE
-                    if (!url.isNullOrBlank()) urlBar.setText(url)
+                    if (!url.isNullOrBlank() && !urlBar.hasFocus()) urlBar.setText(url)
                     syncNav()
                 }
             }
@@ -347,9 +411,9 @@ class BrowserActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 if (currentTab()?.id == tab.id) {
                     isPageLoading = false
-                    btnReload.text = "↻"
+                    syncSmartTopButton()
                     pageProgress.visibility = View.GONE
-                    if (!url.isNullOrBlank()) urlBar.setText(url)
+                    if (!url.isNullOrBlank() && !urlBar.hasFocus()) urlBar.setText(url)
                     syncNav()
                 }
                 view?.evaluateJavascript(BrowserHelper.HOOK_JS, null)
@@ -462,9 +526,10 @@ class BrowserActivity : AppCompatActivity() {
         webContainer.removeAllViews()
         webContainer.addView(tab.webView)
         urlBar.setText(tab.webView.url ?: searxngBaseUrl)
-        btnTabs.text = "❐ ${tabs.size}"
+        btnTabs.text = "${tabs.size}"
         updateBadge()
         syncNav()
+        syncSmartTopButton()
     }
 
     private fun closeTab(index: Int) {
@@ -485,15 +550,27 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun syncNav() {
-        val canBack = currentTab()?.webView?.canGoBack() == true
+        val wv = currentTab()?.webView
+        val canBack = wv?.canGoBack() == true
+        val canForward = wv?.canGoForward() == true
+
         btnBack.isEnabled = canBack
+        btnBack.setTextColor(Color.parseColor(if (canBack) "#CDD6F4" else "#45475A"))
+
+        btnForward.isEnabled = canForward
+        btnForward.setTextColor(Color.parseColor(if (canForward) "#CDD6F4" else "#45475A"))
+
         backCallback.isEnabled = canBack || tabs.size > 1
     }
 
     private fun updateBadge() {
         val count = currentTab()?.let { t -> synchronized(t.streams) { t.streams.size } } ?: 0
-        btnFloatingCatcher.text = "⬇ $count"
-        btnFloatingCatcher.setTextColor(Color.parseColor(if (count > 0) "#00FF9C" else "#00E5FF"))
+        if (count > 0 || isInspecting) {
+            btnFloatingCatcher.visibility = View.VISIBLE
+            btnFloatingCatcher.text = if (isInspecting) "⏳" else "⬇ $count"
+        } else {
+            btnFloatingCatcher.visibility = View.GONE
+        }
     }
 
     private fun loadInCurrentTab(input: String) {
@@ -621,7 +698,7 @@ class BrowserActivity : AppCompatActivity() {
 
                 val tvTitle = row.findViewById<TextView>(R.id.tvTabTitle)
                 tvTitle.text = if (isActive) "● $title" else title
-                tvTitle.setTextColor(Color.parseColor(if (isActive) "#00E5FF" else "#F0F4FF"))
+                tvTitle.setTextColor(Color.parseColor(if (isActive) "#CBA6F7" else "#CDD6F4"))
                 row.findViewById<TextView>(R.id.tvTabStreams).text = "$cnt stream(s) caught"
 
                 row.findViewById<View>(R.id.tabRowInfo).setOnClickListener {
@@ -654,7 +731,6 @@ class BrowserActivity : AppCompatActivity() {
     private fun showNavigationDrawerMenu() {
         val wv = currentTab()?.webView
         val items = arrayOf(
-            if (wv?.canGoForward() == true) "▶ Forward" else "▶ Forward (Disabled)",
             "⌂ 4get Home",
             "+ New Window / Tab",
             "⭐ Bookmark This Page",
@@ -662,7 +738,7 @@ class BrowserActivity : AppCompatActivity() {
             if (adShieldEnabled) "🛡 Ad & Redirect Shield: ON" else "🛡 Ad & Redirect Shield: OFF",
             if (desktopMode) "🖥 Desktop Site: ON" else "🖥 Desktop Site: OFF",
             "🔍 Change Search Engine",
-            "🔗 Paste .m3u8 URL Manually",
+            "🔗 Paste .m3u8 / Video URL Manually",
             "🧹 Clear Detected Streams"
         )
 
@@ -670,28 +746,27 @@ class BrowserActivity : AppCompatActivity() {
             .setTitle("Navigation & Tools")
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> wv?.takeIf { it.canGoForward() }?.goForward()
-                    1 -> loadInCurrentTab(searxngBaseUrl)
-                    2 -> openNewTab(searxngBaseUrl)
-                    3 -> bookmarkCurrentPage()
-                    4 -> showBookmarksDialog()
-                    5 -> {
+                    0 -> loadInCurrentTab(searxngBaseUrl)
+                    1 -> openNewTab(searxngBaseUrl)
+                    2 -> bookmarkCurrentPage()
+                    3 -> showBookmarksDialog()
+                    4 -> {
                         adShieldEnabled = !adShieldEnabled
                         Toast.makeText(this, if (adShieldEnabled) "Shield ON" else "Shield OFF", Toast.LENGTH_SHORT).show()
                     }
-                    6 -> {
+                    5 -> {
                         desktopMode = !desktopMode
                         wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
                         wv?.reload()
                     }
-                    7 -> AlertDialog.Builder(this)
+                    6 -> AlertDialog.Builder(this)
                         .setTitle("Select Search Engine")
                         .setItems(BrowserHelper.SEARXNG_INSTANCES) { _, i ->
                             searxngBaseUrl = BrowserHelper.SEARXNG_INSTANCES[i]
                             loadInCurrentTab(searxngBaseUrl)
                         }.show()
-                    8 -> showManualPasteDialog()
-                    9 -> {
+                    7 -> showManualPasteDialog()
+                    8 -> {
                         currentTab()?.let { t -> synchronized(t.streams) { t.streams.clear() } }
                         updateBadge()
                         Toast.makeText(this, "Stream list cleared", Toast.LENGTH_SHORT).show()
@@ -755,7 +830,7 @@ class BrowserActivity : AppCompatActivity() {
         val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "HLS_Video" } ?: "HLS_Video"
 
         isInspecting = true
-        btnFloatingCatcher.text = "⏳"
+        updateBadge()
 
         inspectExecutor.execute {
             val options = mutableListOf<StreamOption>()
