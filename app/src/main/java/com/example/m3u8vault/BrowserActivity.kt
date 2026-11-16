@@ -68,10 +68,17 @@ class BrowserActivity : AppCompatActivity() {
     private var desktopMode = false
     private var autoTranslateEnabled = false
     private var translateTargetLang = "en"
-    private var searxngBaseUrl = "https://4get.ca"
+    private var searxngBaseUrl = "https://lite.duckduckgo.com/lite/"
     private var isInspecting = false
     private val inspectExecutor = Executors.newSingleThreadExecutor()
     private val translateExecutor = Executors.newFixedThreadPool(2)
+
+    private val searchEngines = listOf(
+        "DuckDuckGo Lite (No CAPTCHA)" to "https://lite.duckduckgo.com/lite/",
+        "Mojeek (No CAPTCHA)" to "https://www.mojeek.com/",
+        "Brave Search" to "https://search.brave.com/",
+        "4get.ca" to "https://4get.ca"
+    )
 
     private val supportedLanguages = listOf(
         "English" to "en",
@@ -105,6 +112,8 @@ class BrowserActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
         autoTranslateEnabled = prefs.getBoolean("auto_translate_enabled", false)
         translateTargetLang = prefs.getString("translate_target_lang", "en") ?: "en"
+        searxngBaseUrl = prefs.getString("default_search_url", "https://lite.duckduckgo.com/lite/")
+            ?: "https://lite.duckduckgo.com/lite/"
 
         canvasWrapper = findViewById(R.id.canvasWrapper)
         webContainer = findViewById(R.id.webContainer)
@@ -267,6 +276,21 @@ class BrowserActivity : AppCompatActivity() {
             return true
         }
         return false
+    }
+
+    private fun resolveSearchOrUrl(input: String): String {
+        val trimmed = input.trim()
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+        if (!trimmed.contains(" ") && trimmed.contains(".") && !trimmed.startsWith(".")) {
+            return "https://$trimmed"
+        }
+        val q = URLEncoder.encode(trimmed, "UTF-8")
+        return when {
+            searxngBaseUrl.contains("duckduckgo.com") -> "https://lite.duckduckgo.com/lite/?q=$q"
+            searxngBaseUrl.contains("mojeek.com") -> "https://www.mojeek.com/search?q=$q"
+            searxngBaseUrl.contains("brave.com") -> "https://search.brave.com/search?q=$q"
+            else -> BrowserHelper.resolveInput(trimmed, searxngBaseUrl)
+        }
     }
 
     private fun triggerAutoTranslation(webView: WebView?) {
@@ -719,7 +743,7 @@ class BrowserActivity : AppCompatActivity() {
         synchronized(tab.streams) { tab.streams.clear() }
         tab.lastUrl = ""
         updateBadge()
-        tab.webView.loadUrl(BrowserHelper.resolveInput(input, searxngBaseUrl))
+        tab.webView.loadUrl(resolveSearchOrUrl(input))
     }
 
     private fun getSavedBookmarks(): MutableList<Pair<String, String>> {
@@ -872,7 +896,7 @@ class BrowserActivity : AppCompatActivity() {
         val wv = currentTab()?.webView
         val langName = supportedLanguages.firstOrNull { it.second == translateTargetLang }?.first ?: translateTargetLang
         val items = arrayOf(
-            "⌂ 4get Home",
+            "⌂ Search Home",
             "+ New Window / Tab",
             "⭐ Bookmark This Page",
             "🔖 Saved Bookmarks",
@@ -929,12 +953,20 @@ class BrowserActivity : AppCompatActivity() {
                         wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
                         wv?.reload()
                     }
-                    8 -> AlertDialog.Builder(this)
-                        .setTitle("Select Search Engine")
-                        .setItems(BrowserHelper.SEARXNG_INSTANCES) { _, i ->
-                            searxngBaseUrl = BrowserHelper.SEARXNG_INSTANCES[i]
-                            loadInCurrentTab(searxngBaseUrl)
-                        }.show()
+                    8 -> {
+                        val combined = searchEngines + BrowserHelper.SEARXNG_INSTANCES
+                            .filterNot { url -> searchEngines.any { it.second == url } }
+                            .map { it to it }
+                        val labels = combined.map { it.first }.toTypedArray()
+                        AlertDialog.Builder(this)
+                            .setTitle("Select Search Engine")
+                            .setItems(labels) { _, i ->
+                                searxngBaseUrl = combined[i].second
+                                getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+                                    .edit().putString("default_search_url", searxngBaseUrl).apply()
+                                loadInCurrentTab(searxngBaseUrl)
+                            }.show()
+                    }
                     9 -> showManualPasteDialog()
                     10 -> {
                         currentTab()?.let { t -> synchronized(t.streams) { t.streams.clear() } }
@@ -1054,7 +1086,6 @@ class BrowserActivity : AppCompatActivity() {
             }
         }
 
-        // Mauve Drag Handle
         val handle = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(dpInt(42f), dpInt(4f)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -1067,7 +1098,6 @@ class BrowserActivity : AppCompatActivity() {
         }
         sheet.addView(handle)
 
-        // Header
         val tvTitle = TextView(this).apply {
             text = "Select Stream Quality"
             setTextColor(Color.parseColor("#CDD6F4"))
@@ -1081,7 +1111,6 @@ class BrowserActivity : AppCompatActivity() {
         }
         sheet.addView(tvTitle)
 
-        // Recessed Video Name Input
         val etName = EditText(this).apply {
             setText(defaultTitle)
             hint = "Save video as..."
@@ -1102,7 +1131,6 @@ class BrowserActivity : AppCompatActivity() {
         }
         sheet.addView(etName)
 
-        // Quality Rows Container
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1191,7 +1219,6 @@ class BrowserActivity : AppCompatActivity() {
         scroll.addView(listContainer)
         sheet.addView(scroll)
 
-        // Wide Mint Download Button
         val btnDownload = Button(this).apply {
             text = "Download"
             isAllCaps = false
