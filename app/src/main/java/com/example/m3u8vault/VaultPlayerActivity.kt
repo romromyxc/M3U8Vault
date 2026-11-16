@@ -116,18 +116,21 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     private fun applyCatppuccinStyles() {
         listOf(
-            findViewById<View>(R.id.btnAutoNext),
-            findViewById<View>(R.id.btnPrevVideo),
-            findViewById<View>(R.id.btnNextVideo),
-            findViewById<View>(R.id.btnPlaylistPopup),
-            findViewById<View>(R.id.btnFullscreen)
+            findViewById<Button>(R.id.btnAutoNext),
+            findViewById<Button>(R.id.btnPlaylistPopup),
+            findViewById<Button>(R.id.btnFullscreen)
         ).forEach { btn ->
+            btn.backgroundTintList = null
             btn.background = GradientDrawable().apply {
                 setColor(Color.parseColor("#313244"))
                 cornerRadius = dp(10f)
             }
         }
 
+        findViewById<Button>(R.id.btnVaultBack).backgroundTintList = null
+        findViewById<Button>(R.id.btnLockVault).backgroundTintList = null
+
+        btnPinUnlock.backgroundTintList = null
         btnPinUnlock.background = GradientDrawable().apply {
             setColor(Color.parseColor("#CBA6F7"))
             cornerRadius = dp(24f)
@@ -180,8 +183,6 @@ class VaultPlayerActivity : AppCompatActivity() {
             true
         }
 
-        findViewById<Button>(R.id.btnPrevVideo).setOnClickListener { playAdjacentVideo(-1) }
-        findViewById<Button>(R.id.btnNextVideo).setOnClickListener { playAdjacentVideo(1) }
         findViewById<Button>(R.id.btnPlaylistPopup).setOnClickListener { showQuickPlaylistBottomSheet() }
         findViewById<Button>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen(!isFullscreen) }
 
@@ -197,25 +198,39 @@ class VaultPlayerActivity : AppCompatActivity() {
             renderList()
         }
 
-        // Swipe left/right on player frame to jump Next/Previous without closing
-        var downX = 0f
-        var downY = 0f
-        playerFrame.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.x
-                    downY = event.y
-                }
-                MotionEvent.ACTION_UP -> {
-                    val dx = event.x - downX
-                    val dy = event.y - downY
-                    if (abs(dx) > dp(70f) && abs(dx) > abs(dy) * 1.5f) {
-                        if (dx < 0) playAdjacentVideo(1) else playAdjacentVideo(-1)
-                        return@setOnTouchListener true
+        // Swipe Up inside video -> Next video | Swipe Down inside video -> Previous video
+        var verticalSwiped = false
+        val swipeDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float
+            ): Boolean {
+                if (e1 == null) return false
+                val diffY = e2.y - e1.y
+                val diffX = e2.x - e1.x
+                if (abs(diffY) > abs(diffX) * 1.3f && abs(diffY) > dp(45f) && abs(velocityY) > 150f) {
+                    verticalSwiped = true
+                    if (diffY < 0) {
+                        playAdjacentVideo(1) // Swipe Up -> Next
+                    } else {
+                        playAdjacentVideo(-1) // Swipe Down -> Previous
                     }
+                    return true
                 }
+                return false
             }
-            false
+        })
+
+        vaultPlayerView.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                verticalSwiped = false
+            }
+            swipeDetector.onTouchEvent(event)
+            verticalSwiped
         }
     }
 
@@ -447,7 +462,7 @@ class VaultPlayerActivity : AppCompatActivity() {
                     }
                     "$stateLabel • $sizeStr"
                 } else {
-                    if (isPlaying) "Now Playing • $sizeStr" else "Saved Offline • $sizeStr"
+                    if (isPlaying) "Now Playing (Swipe ↑/↓) • $sizeStr" else "Saved Offline • $sizeStr"
                 }
 
                 val tvSub = TextView(this@VaultPlayerActivity).apply {
@@ -463,7 +478,9 @@ class VaultPlayerActivity : AppCompatActivity() {
                     val btnToggle = Button(this@VaultPlayerActivity).apply {
                         text = if (isPaused) "▶" else "⏸"
                         setTextColor(Color.parseColor("#CDD6F4"))
+                        backgroundTintList = null
                         background = ColorDrawable(Color.TRANSPARENT)
+                        setPadding(0, 0, 0, 0)
                         layoutParams = LinearLayout.LayoutParams(dpInt(38f), dpInt(38f))
                         setOnClickListener {
                             if (isPaused) VaultEngine.resumeDownload(this@VaultPlayerActivity, id)
@@ -477,7 +494,9 @@ class VaultPlayerActivity : AppCompatActivity() {
                 val btnDelete = Button(this@VaultPlayerActivity).apply {
                     text = "🗑"
                     setTextColor(Color.parseColor("#F38BA8"))
+                    backgroundTintList = null
                     background = ColorDrawable(Color.TRANSPARENT)
+                    setPadding(0, 0, 0, 0)
                     layoutParams = LinearLayout.LayoutParams(dpInt(38f), dpInt(38f))
                     setOnClickListener {
                         AlertDialog.Builder(this@VaultPlayerActivity)
@@ -542,6 +561,8 @@ class VaultPlayerActivity : AppCompatActivity() {
                 text = key
                 textSize = 20f
                 setTextColor(Color.parseColor("#CDD6F4"))
+                backgroundTintList = null
+                setPadding(0, 0, 0, 0)
                 layoutParams = GridLayout.LayoutParams().apply {
                     width = dpInt(68f)
                     height = dpInt(68f)
