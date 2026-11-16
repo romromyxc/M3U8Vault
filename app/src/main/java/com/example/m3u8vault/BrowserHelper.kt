@@ -74,7 +74,14 @@ object BrowserHelper {
                 checkUrl(url);
                 return origOpen.apply(this, arguments);
             };
-            window.open = function() { return null; };
+            window.open = function(url) {
+                if (typeof url === 'string' && url.trim().length > 0 && !url.startsWith('javascript:')) {
+                    try {
+                        VaultSniffer.onWindowOpen(new URL(url, location.href).href);
+                    } catch (e) {}
+                }
+                return null;
+            };
         })();
     """.trimIndent()
 }
