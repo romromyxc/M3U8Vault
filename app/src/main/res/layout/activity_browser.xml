@@ -1,185 +1,191 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#06070D">
+    android:background="#1E1E2E"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
 
-    <!-- Top Search & Address Bar -->
+    <!-- Top Bar with Unified Search Pill & 2-in-1 Action Icon -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:layout_height="54dp"
+        android:background="#1E1E2E"
         android:gravity="center_vertical"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="7dp"
-        android:background="#0A0D18">
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="7dp">
 
-        <EditText
-            android:id="@+id/urlBar"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_neon_input"
-            android:hint="Search SearXNG or enter URL..."
-            android:imeOptions="actionGo"
-            android:inputType="textUri"
-            android:paddingHorizontal="12dp"
-            android:selectAllOnFocus="true"
-            android:singleLine="true"
-            android:textColor="#F0F4FF"
-            android:textColorHint="#68749C"
-            android:textSize="13sp" />
+        <LinearLayout
+            android:id="@+id/searchPillContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#313244"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="6dp">
 
-        <Button
-            android:id="@+id/btnClearUrl"
-            android:layout_width="36dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="6dp"
-            android:minWidth="0dp"
-            android:padding="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_dark"
-            app:backgroundTint="@null"
-            android:text="✕"
-            android:textColor="#FF2A85"
-            android:textSize="13sp" />
+            <EditText
+                android:id="@+id/urlBar"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="Search or enter URL"
+                android:imeOptions="actionGo"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:selectAllOnFocus="true"
+                android:singleLine="true"
+                android:textColor="#CDD6F4"
+                android:textColorHint="#6C7086"
+                android:textSize="14sp" />
 
-        <Button
-            android:id="@+id/btnReload"
-            android:layout_width="38dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="5dp"
-            android:minWidth="0dp"
-            android:padding="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_dark"
-            app:backgroundTint="@null"
-            android:text="↻"
-            android:textColor="#00E5FF"
-            android:textSize="17sp" />
+            <Button
+                android:id="@+id/btnReload"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Reload or Clear"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:padding="0dp"
+                android:text="↻"
+                android:textColor="#CDD6F4"
+                android:textSize="17sp" />
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- Neon Loading Line -->
+    <!-- Catppuccin Mauve Progress Hairline -->
     <ProgressBar
         android:id="@+id/pageProgress"
-        style="?android:attr/progressBarStyleHorizontal"
+        style="@android:style/Widget.ProgressBar.Horizontal"
         android:layout_width="match_parent"
-        android:layout_height="3dp"
+        android:layout_height="2dp"
         android:max="100"
-        android:progress="0"
-        android:progressDrawable="@drawable/progress_neon"
+        android:progressBackgroundTint="#181825"
+        android:progressTint="#CBA6F7"
         android:visibility="gone" />
 
-    <!-- Browser Viewport + Floating Video Catcher Overlay -->
+    <!-- Full-Height WebView Canvas + Auto-Hiding Floating Catcher -->
     <FrameLayout
+        android:id="@+id/canvasWrapper"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#06070D">
+        android:background="#1E1E2E">
 
         <FrameLayout
             android:id="@+id/webContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- Floating Draggable Video Catcher Pill -->
         <Button
             android:id="@+id/btnFloatingCatcher"
             android:layout_width="wrap_content"
-            android:layout_height="46dp"
+            android:layout_height="42dp"
             android:layout_gravity="bottom|end"
             android:layout_margin="16dp"
-            android:minWidth="66dp"
-            android:paddingHorizontal="14dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:elevation="8dp"
-            android:background="@drawable/bg_floating_catcher"
-            app:backgroundTint="@null"
+            android:background="#A6E3A1"
+            android:elevation="6dp"
+            android:minWidth="68dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="16dp"
             android:text="⬇ 0"
-            android:textColor="#00E5FF"
+            android:textAllCaps="false"
+            android:textColor="#11111B"
             android:textSize="14sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:visibility="gone" />
     </FrameLayout>
 
+    <!-- Subtle Hairline Divider -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#1D2542" />
+        android:background="#181825" />
 
-    <!-- Clean Bottom Bar: Back | Tabs | Downloading | Menu -->
+    <!-- Minimalist 5-Icon Bottom Dock -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:layout_height="48dp"
+        android:background="#1E1E2E"
         android:gravity="center_vertical"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="7dp"
-        android:background="#0A0D18">
+        android:orientation="horizontal">
 
         <Button
             android:id="@+id/btnBack"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="Back"
             android:minWidth="0dp"
-            android:padding="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_dark"
-            app:backgroundTint="@null"
-            android:enabled="false"
-            android:text="◀"
-            android:textColor="#E2E8FF"
-            android:textSize="14sp" />
+            android:minHeight="0dp"
+            android:text="←"
+            android:textColor="#45475A"
+            android:textSize="20sp" />
 
         <Button
-            android:id="@+id/btnTabs"
-            android:layout_width="56dp"
-            android:layout_height="42dp"
-            android:layout_marginStart="6dp"
+            android:id="@+id/btnForward"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="Forward"
             android:minWidth="0dp"
-            android:padding="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_dark"
-            app:backgroundTint="@null"
-            android:text="❐ 1"
-            android:textColor="#BB9AF7"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:minHeight="0dp"
+            android:text="→"
+            android:textColor="#45475A"
+            android:textSize="20sp" />
+
+        <FrameLayout
+            android:id="@+id/tabSlot"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:contentDescription="Open Tabs"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/btnTabs"
+                android:layout_width="23dp"
+                android:layout_height="23dp"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="1"
+                android:textColor="#CDD6F4"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </FrameLayout>
 
         <Button
             android:id="@+id/btnVault"
             android:layout_width="0dp"
-            android:layout_height="42dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginHorizontal="6dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_pink"
-            app:backgroundTint="@null"
-            android:text="⚡ Downloading"
-            android:textColor="#FF6EB4"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:background="@android:color/transparent"
+            android:contentDescription="Private Vault &amp; Downloads"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:text="⚡"
+            android:textColor="#CBA6F7"
+            android:textSize="18sp" />
 
         <Button
             android:id="@+id/btnMenu"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:contentDescription="Menu"
             android:minWidth="0dp"
-            android:padding="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_dark"
-            app:backgroundTint="@null"
-            android:text="☰"
-            android:textColor="#00FF9C"
-            android:textSize="16sp" />
+            android:minHeight="0dp"
+            android:text="⋮"
+            android:textColor="#CDD6F4"
+            android:textSize="20sp" />
     </LinearLayout>
+
 </LinearLayout>
-<!-- END OF FILE -->
