@@ -16,6 +16,9 @@ import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -29,6 +32,7 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     private lateinit var playerSection: LinearLayout
     private lateinit var playerFrame: FrameLayout
+    private lateinit var quickSwitchBar: LinearLayout
     private lateinit var vaultPlayerView: PlayerView
     private lateinit var tvNowPlaying: TextView
     private lateinit var btnAutoNext: Button
@@ -40,6 +44,7 @@ class VaultPlayerActivity : AppCompatActivity() {
     private lateinit var tvTabDownloading: TextView
     private lateinit var indTabVideos: View
     private lateinit var indTabDownloading: View
+    private lateinit var btnExitFullscreenOverlay: Button
 
     private lateinit var pinLockOverlay: LinearLayout
     private lateinit var tvPinHeading: TextView
@@ -81,6 +86,7 @@ class VaultPlayerActivity : AppCompatActivity() {
 
         playerSection = findViewById(R.id.playerSection)
         playerFrame = findViewById(R.id.playerFrame)
+        quickSwitchBar = findViewById(R.id.quickSwitchBar)
         vaultPlayerView = findViewById(R.id.vaultPlayerView)
         tvNowPlaying = findViewById(R.id.tvNowPlaying)
         btnAutoNext = findViewById(R.id.btnAutoNext)
@@ -102,6 +108,27 @@ class VaultPlayerActivity : AppCompatActivity() {
             findViewById(R.id.pinDot3),
             findViewById(R.id.pinDot4)
         )
+
+        btnExitFullscreenOverlay = Button(this).apply {
+            text = "✕"
+            textSize = 14f
+            setTextColor(Color.parseColor("#CDD6F4"))
+            backgroundTintList = null
+            setPadding(0, 0, 0, 0)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#AA1E1E2E"))
+                setStroke(dpInt(1f), Color.parseColor("#CBA6F7"))
+            }
+            layoutParams = FrameLayout.LayoutParams(dpInt(36f), dpInt(36f)).apply {
+                gravity = Gravity.TOP or Gravity.END
+                topMargin = dpInt(14f)
+                marginEnd = dpInt(14f)
+            }
+            visibility = View.GONE
+            setOnClickListener { toggleFullscreen(false) }
+        }
+        playerFrame.addView(btnExitFullscreenOverlay)
 
         onBackPressedDispatcher.addCallback(this, backCallback)
         applyCatppuccinStyles()
@@ -137,16 +164,30 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun saveSafePosition(videoId: String, player: ExoPlayer) {
+        val dur = player.duration
+        val pos = player.currentPosition
+        val safePos = if (dur > 0L && pos >= dur - 2000L) 0L else pos
+        VaultEngine.savePlaybackPosition(this, videoId, safePos)
+    }
+
     private fun initPlayer() {
         val cacheFactory = VaultEngine.buildCacheDataSourceFactory(this)
         exoPlayer = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
             .build()
             .apply {
+                repeatMode = Player.REPEAT_MODE_OFF
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_ENDED && autoAdvanceEnabled) {
-                            playAdjacentVideo(1)
+                        if (playbackState == Player.STATE_ENDED) {
+                            currentPlayingId?.let { VaultEngine.savePlaybackPosition(this@VaultPlayerActivity, it, 0L) }
+                            if (autoAdvanceEnabled && completedVideos.size > 1) {
+                                playAdjacentVideo(1)
+                            } else {
+                                playWhenReady = false
+                                seekTo(0L)
+                            }
                         }
                     }
                 })
@@ -198,7 +239,6 @@ class VaultPlayerActivity : AppCompatActivity() {
             renderList()
         }
 
-        // Swipe Up inside video -> Next video | Swipe Down inside video -> Previous video
         var verticalSwiped = false
         val swipeDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
@@ -215,9 +255,9 @@ class VaultPlayerActivity : AppCompatActivity() {
                 if (abs(diffY) > abs(diffX) * 1.3f && abs(diffY) > dp(45f) && abs(velocityY) > 150f) {
                     verticalSwiped = true
                     if (diffY < 0) {
-                        playAdjacentVideo(1) // Swipe Up -> Next
+                        playAdjacentVideo(1)
                     } else {
-                        playAdjacentVideo(-1) // Swipe Down -> Previous
+                        playAdjacentVideo(-1)
                     }
                     return true
                 }
@@ -237,22 +277,43 @@ class VaultPlayerActivity : AppCompatActivity() {
     private fun toggleFullscreen(enable: Boolean) {
         isFullscreen = enable
         backCallback.isEnabled = enable
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+
         if (enable) {
             vaultTopBar.visibility = View.GONE
+            quickSwitchBar.visibility = View.GONE
             vaultTabsBar.visibility = View.GONE
             vaultListView.visibility = View.GONE
             tvEmptyVault.visibility = View.GONE
+            btnExitFullscreenOverlay.visibility = View.VISIBLE
+
+            playerSection.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             playerFrame.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
+
+            insetsController.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+
+            btnExitFullscreenOverlay.visibility = View.GONE
             vaultTopBar.visibility = View.VISIBLE
+            quickSwitchBar.visibility = View.VISIBLE
             vaultTabsBar.visibility = View.VISIBLE
             vaultListView.visibility = View.VISIBLE
+
+            playerSection.layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
             playerFrame.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dpInt(220f)
@@ -264,7 +325,7 @@ class VaultPlayerActivity : AppCompatActivity() {
     private fun playVideo(download: Download) {
         val player = exoPlayer ?: return
         currentPlayingId?.let { prevId ->
-            VaultEngine.savePlaybackPosition(this, prevId, player.currentPosition)
+            saveSafePosition(prevId, player)
         }
 
         val id = download.request.id
@@ -277,17 +338,23 @@ class VaultPlayerActivity : AppCompatActivity() {
         tvNowPlaying.text = title
 
         val mediaItem = VaultEngine.buildMediaItem(url, title, cacheKey)
+        player.stop()
         player.setMediaItem(mediaItem)
         player.prepare()
 
         val savedPos = VaultEngine.getPlaybackPosition(this, id)
-        if (savedPos > 0L) player.seekTo(savedPos)
+        if (savedPos > 1000L) player.seekTo(savedPos)
         player.playWhenReady = true
         renderList()
     }
 
     private fun playAdjacentVideo(offset: Int) {
         if (completedVideos.isEmpty()) return
+        if (completedVideos.size == 1) {
+            exoPlayer?.seekTo(0L)
+            exoPlayer?.playWhenReady = true
+            return
+        }
         val currentIdx = completedVideos.indexOfFirst { it.request.id == currentPlayingId }
         val nextIdx = if (currentIdx == -1) {
             0
@@ -648,7 +715,7 @@ class VaultPlayerActivity : AppCompatActivity() {
     override fun onPause() {
         refreshHandler.removeCallbacks(refreshRunnable)
         currentPlayingId?.let { id ->
-            exoPlayer?.let { VaultEngine.savePlaybackPosition(this, id, it.currentPosition) }
+            exoPlayer?.let { saveSafePosition(id, it) }
         }
         super.onPause()
     }
