@@ -71,7 +71,7 @@ class BrowserActivity : AppCompatActivity() {
     private var searxngBaseUrl = "https://lite.duckduckgo.com/lite/"
     private var isInspecting = false
     private val inspectExecutor = Executors.newSingleThreadExecutor()
-    private val translateExecutor = Executors.newFixedThreadPool(2)
+    private val translateExecutor = Executors.newFixedThreadPool(3)
 
     private val searchEngines = listOf(
         "DuckDuckGo Lite (No CAPTCHA)" to "https://lite.duckduckgo.com/lite/",
@@ -293,60 +293,134 @@ class BrowserActivity : AppCompatActivity() {
         }
     }
 
-    private fun triggerAutoTranslation(webView: WebView?) {
+    private fun triggerAutoTranslation(webView: WebView?, resetExisting: Boolean = false) {
         if (!autoTranslateEnabled || webView == null) return
+        val resetFlag = if (resetExisting) "true" else "false"
         val script = """
             (function() {
-                if (window.__vaultTranslating) return;
-                window.__vaultTranslating = true;
-                window.__vaultTextNodes = [];
-                window.__vaultBatches = {};
-                const skipTags = new Set(['SCRIPT','STYLE','NOSCRIPT','CODE','PRE','INPUT','TEXTAREA','SELECT','SVG']);
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-                    acceptNode: function(node) {
-                        if (!node.parentElement || skipTags.has(node.parentElement.tagName)) return NodeFilter.FILTER_REJECT;
-                        const txt = node.nodeValue.trim();
-                        if (txt.length < 2 || /^[0-9\s\W_]+$/.test(txt)) return NodeFilter.FILTER_REJECT;
-                        return NodeFilter.FILTER_ACCEPT;
+                window.__vaultAutoTranslateActive = true;
+                if (!window.__vaultNodeMap) window.__vaultNodeMap = new Map();
+                if (!window.__vaultNextId) window.__vaultNextId = 1;
+
+                if ($resetFlag) {
+                    window.__vaultNodeMap.forEach((entry) => {
+                        if (entry.type === 'text') {
+                            entry.node.__vaultTranslated = false;
+                            entry.node.nodeValue = entry.orig;
+                        } else if (entry.type === 'placeholder') {
+                            entry.node.__vaultPhTranslated = false;
+                            entry.node.setAttribute('placeholder', entry.orig);
+                        }
+                    });
+                    window.__vaultNodeMap.clear();
+                }
+
+                const skipTags = new Set(['SCRIPT','STYLE','NOSCRIPT','CODE','PRE','TEXTAREA','SVG','CANVAS','IFRAME']);
+
+                function isTranslatableText(str) {
+                    if (!str) return false;
+                    const t = str.trim();
+                    if (!t) return false;
+                    const hasNonAsciiLetter = /[\u00C0-\u024F\u0400-\u04FF\u0600-\u06FF\u0900-\u0D7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/.test(t);
+                    if (!hasNonAsciiLetter && t.length < 2) return false;
+                    if (/^[0-9\s\W_]+$/.test(t)) return false;
+                    if (/^https?:\/\//i.test(t)) return false;
+                    return true;
+                }
+
+                function scanAndQueue() {
+                    if (!window.__vaultAutoTranslateActive) return;
+                    const root = document.body || document.documentElement;
+                    if (!root) return;
+                    const pending = [];
+
+                    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                        acceptNode: function(node) {
+                            const p = node.parentElement;
+                            if (!p || skipTags.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+                            if (p.isContentEditable) return NodeFilter.FILTER_REJECT;
+                            if (node.__vaultTranslated) return NodeFilter.FILTER_REJECT;
+                            if (!isTranslatableText(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    });
+
+                    let n;
+                    while ((n = walker.nextNode())) {
+                        n.__vaultTranslated = true;
+                        if (n.__vaultOrig === undefined) n.__vaultOrig = n.nodeValue;
+                        const id = window.__vaultNextId++;
+                        window.__vaultNodeMap.set(id, { type: 'text', node: n, orig: n.__vaultOrig });
+                        pending.push({ id: id, text: n.__vaultOrig.trim() });
                     }
-                });
-                let n;
-                while ((n = walker.nextNode())) {
-                    if (!n.__vaultOrig) n.__vaultOrig = n.nodeValue;
-                    window.__vaultTextNodes.push(n);
+
+                    const inputs = document.querySelectorAll('input[placeholder], textarea[placeholder]');
+                    for (const inp of inputs) {
+                        if (inp.__vaultPhTranslated) continue;
+                        const ph = inp.getAttribute('placeholder');
+                        if (isTranslatableText(ph)) {
+                            inp.__vaultPhTranslated = true;
+                            const id = window.__vaultNextId++;
+                            window.__vaultNodeMap.set(id, { type: 'placeholder', node: inp, orig: ph });
+                            pending.push({ id: id, text: ph.trim() });
+                        }
+                    }
+
+                    if (!pending.length) return;
+
+                    let batch = [];
+                    let charCount = 0;
+                    const sendBatch = () => {
+                        if (!batch.length) return;
+                        VaultSniffer.requestTranslateBatch(JSON.stringify(batch));
+                        batch = [];
+                        charCount = 0;
+                    };
+
+                    for (const item of pending) {
+                        if (charCount + item.text.length > 1800 || batch.length >= 45) {
+                            sendBatch();
+                        }
+                        batch.push(item);
+                        charCount += item.text.length + 10;
+                    }
+                    sendBatch();
                 }
-                const nodes = window.__vaultTextNodes;
-                let batch = [];
-                let indices = [];
-                let charCount = 0;
-                let batchId = 1;
-                const flush = () => {
-                    if (!batch.length) return;
-                    const id = batchId++;
-                    window.__vaultBatches[id] = indices;
-                    VaultSniffer.requestTranslate(id, JSON.stringify(batch));
-                    batch = [];
-                    indices = [];
-                    charCount = 0;
-                };
-                for (let i = 0; i < nodes.length && i < 350; i++) {
-                    const t = nodes[i].__vaultOrig.trim();
-                    if (charCount + t.length > 1400) flush();
-                    batch.push(t);
-                    indices.push(i);
-                    charCount += t.length;
-                }
-                flush();
-                window.__applyVaultTranslation = function(id, translatedJson) {
+
+                window.__applyVaultTranslationMap = function(resultJson) {
                     try {
-                        const arr = JSON.parse(translatedJson);
-                        const idxs = window.__vaultBatches[id] || [];
-                        for (let j = 0; j < idxs.length && j < arr.length; j++) {
-                            if (arr[j]) window.__vaultTextNodes[idxs[j]].nodeValue = arr[j];
+                        const mapObj = JSON.parse(resultJson);
+                        for (const key in mapObj) {
+                            const id = parseInt(key, 10);
+                            const entry = window.__vaultNodeMap.get(id);
+                            const translated = mapObj[key];
+                            if (!entry || !translated) continue;
+                            if (entry.type === 'text') {
+                                const orig = entry.orig;
+                                const lead = orig.match(/^\s*/)[0];
+                                const trail = orig.match(/\s*$/)[0];
+                                entry.node.nodeValue = lead + translated.trim() + trail;
+                            } else if (entry.type === 'placeholder') {
+                                entry.node.setAttribute('placeholder', translated.trim());
+                            }
                         }
                     } catch (e) {}
                 };
-                setTimeout(() => { window.__vaultTranslating = false; }, 1500);
+
+                scanAndQueue();
+
+                if (!window.__vaultObserver && document.body) {
+                    let timer = null;
+                    window.__vaultObserver = new MutationObserver(() => {
+                        if (!window.__vaultAutoTranslateActive) return;
+                        clearTimeout(timer);
+                        timer = setTimeout(scanAndQueue, 350);
+                    });
+                    window.__vaultObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                }
             })();
         """.trimIndent()
         webView.evaluateJavascript(script, null)
@@ -356,10 +430,18 @@ class BrowserActivity : AppCompatActivity() {
         webView?.evaluateJavascript(
             """
             (function() {
-                if (window.__vaultTextNodes) {
-                    for (const n of window.__vaultTextNodes) {
-                        if (n.__vaultOrig) n.nodeValue = n.__vaultOrig;
-                    }
+                window.__vaultAutoTranslateActive = false;
+                if (window.__vaultNodeMap) {
+                    window.__vaultNodeMap.forEach((entry) => {
+                        if (entry.type === 'text') {
+                            entry.node.__vaultTranslated = false;
+                            entry.node.nodeValue = entry.orig;
+                        } else if (entry.type === 'placeholder') {
+                            entry.node.__vaultPhTranslated = false;
+                            entry.node.setAttribute('placeholder', entry.orig);
+                        }
+                    });
+                    window.__vaultNodeMap.clear();
                 }
             })();
             """.trimIndent(),
@@ -367,25 +449,45 @@ class BrowserActivity : AppCompatActivity() {
         )
     }
 
-    private fun translateBatchRemote(texts: List<String>, targetLang: String): List<String> {
-        val joined = texts.joinToString("\n|||VAULT_SEP|||\n")
-        val encoded = URLEncoder.encode(joined, "UTF-8")
-        val apiUrl = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLang&dt=t&q=$encoded"
-        val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 6000
-            readTimeout = 6000
-            setRequestProperty("User-Agent", BrowserHelper.MOBILE_UA)
+    private fun translateBatchRemote(items: List<Pair<Int, String>>, targetLang: String): Map<Int, String> {
+        if (items.isEmpty()) return emptyMap()
+        val payloadText = items.joinToString("\n") { (id, txt) ->
+            "[#$id] ${txt.replace("\n", " ")}"
         }
-        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        val postBody = "q=" + URLEncoder.encode(payloadText, "UTF-8")
+        val apiUrl = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLang&dt=t"
+
+        val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("User-Agent", BrowserHelper.MOBILE_UA)
+            setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+        }
+        conn.outputStream.use { os ->
+            os.write(postBody.toByteArray(Charsets.UTF_8))
+        }
+        val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         conn.disconnect()
 
         val root = JSONArray(body)
         val sentences = root.getJSONArray(0)
-        val sb = StringBuilder()
+        val fullTranslated = StringBuilder()
         for (i in 0 until sentences.length()) {
-            sb.append(sentences.getJSONArray(i).optString(0))
+            fullTranslated.append(sentences.getJSONArray(i).optString(0))
         }
-        return sb.toString().split(Regex("\\s*\\|\\|\\|VAULT_SEP\\|\\|\\|\\s*"))
+
+        val result = mutableMapOf<Int, String>()
+        val regex = Regex("\\[#\\s*(\\d+)\\s*\\](.*?)(?=\\[#\\s*\\d+\\s*\\]|$)", RegexOption.DOT_MATCHES_ALL)
+        for (match in regex.findAll(fullTranslated.toString())) {
+            val id = match.groupValues[1].toIntOrNull() ?: continue
+            val translatedText = match.groupValues[2].trim()
+            if (translatedText.isNotEmpty()) {
+                result[id] = translatedText
+            }
+        }
+        return result
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -513,19 +615,30 @@ class BrowserActivity : AppCompatActivity() {
             }
 
             @JavascriptInterface
-            fun requestTranslate(batchId: Int, jsonArrayStr: String) {
+            fun requestTranslateBatch(batchJsonStr: String) {
                 if (!autoTranslateEnabled) return
                 val lang = translateTargetLang
                 translateExecutor.execute {
                     runCatching {
-                        val arr = JSONArray(jsonArrayStr)
-                        val texts = (0 until arr.length()).map { arr.getString(it) }
-                        val translated = translateBatchRemote(texts, lang)
-                        val outArr = JSONArray()
-                        translated.forEach { outArr.put(it) }
-                        val jsPayload = JSONObject.quote(outArr.toString())
-                        runOnUiThread {
-                            wv.evaluateJavascript("if(window.__applyVaultTranslation) window.__applyVaultTranslation($batchId, $jsPayload);", null)
+                        val arr = JSONArray(batchJsonStr)
+                        val items = mutableListOf<Pair<Int, String>>()
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            items.add(obj.getInt("id") to obj.getString("text"))
+                        }
+                        val translatedMap = translateBatchRemote(items, lang)
+                        if (translatedMap.isNotEmpty()) {
+                            val outObj = JSONObject()
+                            for ((id, text) in translatedMap) {
+                                outObj.put(id.toString(), text)
+                            }
+                            val jsPayload = JSONObject.quote(outObj.toString())
+                            runOnUiThread {
+                                wv.evaluateJavascript(
+                                    "if(window.__applyVaultTranslationMap) window.__applyVaultTranslationMap($jsPayload);",
+                                    null
+                                )
+                            }
                         }
                     }
                 }
@@ -579,7 +692,7 @@ class BrowserActivity : AppCompatActivity() {
                 }
                 view?.evaluateJavascript(BrowserHelper.HOOK_JS, null)
                 if (autoTranslateEnabled) {
-                    triggerAutoTranslation(view)
+                    triggerAutoTranslation(view, resetExisting = false)
                 }
             }
 
@@ -901,6 +1014,7 @@ class BrowserActivity : AppCompatActivity() {
             "⭐ Bookmark This Page",
             "🔖 Saved Bookmarks",
             if (autoTranslateEnabled) "🌐 Auto Page Translator: ON ($langName)" else "🌐 Auto Page Translator: OFF",
+            "🔄 Translate Current Page Now ($langName)",
             "🗣 Translator Language ($langName)",
             if (adShieldEnabled) "🛡 Ad & Redirect Shield: ON" else "🛡 Ad & Redirect Shield: OFF",
             if (desktopMode) "🖥 Desktop Site: ON" else "🖥 Desktop Site: OFF",
@@ -922,7 +1036,7 @@ class BrowserActivity : AppCompatActivity() {
                         getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
                             .edit().putBoolean("auto_translate_enabled", autoTranslateEnabled).apply()
                         if (autoTranslateEnabled) {
-                            triggerAutoTranslation(wv)
+                            triggerAutoTranslation(wv, resetExisting = false)
                             Toast.makeText(this, "Auto-Translating to $langName", Toast.LENGTH_SHORT).show()
                         } else {
                             restoreOriginalPageText(wv)
@@ -930,6 +1044,13 @@ class BrowserActivity : AppCompatActivity() {
                         }
                     }
                     5 -> {
+                        autoTranslateEnabled = true
+                        getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+                            .edit().putBoolean("auto_translate_enabled", true).apply()
+                        triggerAutoTranslation(wv, resetExisting = true)
+                        Toast.makeText(this, "Translating page to $langName...", Toast.LENGTH_SHORT).show()
+                    }
+                    6 -> {
                         val langLabels = supportedLanguages.map { it.first }.toTypedArray()
                         AlertDialog.Builder(this)
                             .setTitle("Translate Pages Into")
@@ -940,20 +1061,20 @@ class BrowserActivity : AppCompatActivity() {
                                     .putString("translate_target_lang", translateTargetLang)
                                     .putBoolean("auto_translate_enabled", true)
                                     .apply()
-                                triggerAutoTranslation(wv)
+                                triggerAutoTranslation(wv, resetExisting = true)
                                 Toast.makeText(this, "Auto-Translating to ${supportedLanguages[idx].first}", Toast.LENGTH_SHORT).show()
                             }.show()
                     }
-                    6 -> {
+                    7 -> {
                         adShieldEnabled = !adShieldEnabled
                         Toast.makeText(this, if (adShieldEnabled) "Shield ON" else "Shield OFF", Toast.LENGTH_SHORT).show()
                     }
-                    7 -> {
+                    8 -> {
                         desktopMode = !desktopMode
                         wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
                         wv?.reload()
                     }
-                    8 -> {
+                    9 -> {
                         val combined = searchEngines + BrowserHelper.SEARXNG_INSTANCES
                             .filterNot { url -> searchEngines.any { it.second == url } }
                             .map { it to it }
@@ -967,8 +1088,8 @@ class BrowserActivity : AppCompatActivity() {
                                 loadInCurrentTab(searxngBaseUrl)
                             }.show()
                     }
-                    9 -> showManualPasteDialog()
-                    10 -> {
+                    10 -> showManualPasteDialog()
+                    11 -> {
                         currentTab()?.let { t -> synchronized(t.streams) { t.streams.clear() } }
                         updateBadge()
                         Toast.makeText(this, "Stream list cleared", Toast.LENGTH_SHORT).show()
