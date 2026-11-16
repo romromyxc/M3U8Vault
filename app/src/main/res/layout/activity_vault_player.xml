@@ -1,356 +1,334 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#06070D">
+    android:background="#1E1E2E"
+    android:fitsSystemWindows="true">
 
-    <!-- Clean Top Header Matching Screenshot ("Downloading" / "Videos" + Actions) -->
+    <!-- Main Unlocked Vault Content -->
     <LinearLayout
-        android:id="@+id/vaultHeaderBar"
+        android:id="@+id/vaultMainLayout"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="10dp"
-        android:background="#090B14">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tvHeaderTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Downloading"
-            android:textColor="#F0F4FF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnStreamOnline"
-            android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:paddingHorizontal="10dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@drawable/bg_btn_neon_cyan"
-            app:backgroundTint="@null"
-            android:text="+ Stream"
-            android:textColor="#00E5FF"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnHeaderMenu"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginStart="6dp"
-            android:minWidth="0dp"
-            android:padding="0dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:background="@android:color/transparent"
-            app:backgroundTint="@null"
-            android:text="⋮"
-            android:textColor="#F0F4FF"
-            android:textSize="20sp" />
-    </LinearLayout>
-
-    <!-- On-Demand Video Player (Hidden until you play a video or stream an online link) -->
-    <FrameLayout
-        android:id="@+id/playerContainer"
-        android:layout_width="match_parent"
-        android:layout_height="230dp"
-        android:background="#000000"
-        android:visibility="gone">
-
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/playerView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:show_buffering="when_playing"
-            app:use_controller="true" />
-
-        <View
-            android:id="@+id/gestureOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginTop="46dp"
-            android:layout_marginBottom="54dp" />
-
-        <TextView
-            android:id="@+id/tvGestureHud"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:background="@drawable/bg_hud_pill"
-            android:paddingHorizontal="18dp"
-            android:paddingVertical="8dp"
-            android:textColor="#00E5FF"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
-
+        <!-- Top Header -->
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:id="@+id/vaultTopBar"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="#1E1E2E"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp">
+
+            <Button
+                android:id="@+id/btnVaultBack"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:background="@android:color/transparent"
+                android:text="←"
+                android:textColor="#CDD6F4"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="6dp"
+                android:text="Private Vault"
+                android:textColor="#CDD6F4"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnAutoNext"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginEnd="6dp"
+                android:background="#313244"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="10dp"
+                android:text="Auto: ON"
+                android:textAllCaps="false"
+                android:textColor="#A6E3A1"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/btnLockVault"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@android:color/transparent"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:text="🔒"
+                android:textColor="#CBA6F7"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <!-- Embedded Video Player Container -->
+        <LinearLayout
+            android:id="@+id/playerSection"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:layout_margin="6dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/playerFrame"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:background="#11111B">
+
+                <androidx.media3.ui.PlayerView
+                    android:id="@+id/vaultPlayerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:resize_mode="fit"
+                    app:show_buffering="when_playing"
+                    app:use_controller="true" />
+            </FrameLayout>
+
+            <!-- Quick Video Switcher Bar (No Need to Close Video) -->
+            <LinearLayout
+                android:id="@+id/quickSwitchBar"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="#181825"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="10dp">
+
+                <Button
+                    android:id="@+id/btnPrevVideo"
+                    android:layout_width="44dp"
+                    android:layout_height="34dp"
+                    android:background="#313244"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="⏮"
+                    android:textColor="#CDD6F4"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvNowPlaying"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:paddingHorizontal="10dp"
+                    android:text="Select a video"
+                    android:textColor="#CDD6F4"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnNextVideo"
+                    android:layout_width="44dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="#313244"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="⏭"
+                    android:textColor="#CDD6F4"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/btnPlaylistPopup"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="#313244"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="10dp"
+                    android:text="☰ List"
+                    android:textAllCaps="false"
+                    android:textColor="#CBA6F7"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnFullscreen"
+                    android:layout_width="38dp"
+                    android:layout_height="34dp"
+                    android:background="#313244"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:text="⛶"
+                    android:textColor="#CDD6F4"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Videos / Downloading Tabs -->
+        <LinearLayout
+            android:id="@+id/vaultTabsBar"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="#1E1E2E"
             android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/btnQuality"
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:minWidth="40dp"
-                android:paddingHorizontal="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:background="@drawable/bg_btn_neon_dark"
-                app:backgroundTint="@null"
-                android:text="HD"
-                android:textColor="#00FF9C"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+            <LinearLayout
+                android:id="@+id/tabVideos"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
 
-            <Button
-                android:id="@+id/btnSpeed"
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_marginStart="4dp"
-                android:minWidth="42dp"
-                android:paddingHorizontal="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:background="@drawable/bg_btn_neon_dark"
-                app:backgroundTint="@null"
-                android:text="1.0x"
-                android:textColor="#BB9AF7"
-                android:textSize="11sp"
-                android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/tvTabVideos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="Videos"
+                    android:textColor="#CBA6F7"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
-            <Button
-                android:id="@+id/btnRotate"
-                android:layout_width="34dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="4dp"
-                android:minWidth="0dp"
-                android:padding="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:background="@drawable/bg_btn_neon_dark"
-                app:backgroundTint="@null"
-                android:text="⟳"
-                android:textColor="#00E5FF"
-                android:textSize="15sp" />
+                <View
+                    android:id="@+id/indTabVideos"
+                    android:layout_width="match_parent"
+                    android:layout_height="2.5dp"
+                    android:background="#CBA6F7" />
+            </LinearLayout>
 
-            <Button
-                android:id="@+id/btnFullscreen"
-                android:layout_width="34dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="4dp"
-                android:minWidth="0dp"
-                android:padding="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:background="@drawable/bg_btn_neon_dark"
-                app:backgroundTint="@null"
-                android:text="⛶"
-                android:textColor="#00E5FF"
-                android:textSize="14sp" />
+            <LinearLayout
+                android:id="@+id/tabDownloading"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
 
-            <Button
-                android:id="@+id/btnClosePlayer"
-                android:layout_width="34dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="4dp"
-                android:minWidth="0dp"
-                android:padding="0dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:background="@drawable/bg_btn_neon_pink"
-                app:backgroundTint="@null"
-                android:text="✕"
-                android:textColor="#FF6EB4"
-                android:textSize="13sp"
-                android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/tvTabDownloading"
+                    android:layout_width="wrap_content"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="Downloading"
+                    android:textColor="#6C7086"
+                    android:textSize="14sp" />
+
+                <View
+                    android:id="@+id/indTabDownloading"
+                    android:layout_width="match_parent"
+                    android:layout_height="2.5dp"
+                    android:background="@android:color/transparent" />
+            </LinearLayout>
         </LinearLayout>
-    </FrameLayout>
 
-    <!-- Main Video / Download List -->
-    <FrameLayout
-        android:id="@+id/vaultListSection"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#06070D">
-
+        <!-- Empty State -->
         <TextView
             android:id="@+id/tvEmptyVault"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
             android:gravity="center"
-            android:padding="28dp"
-            android:text="No active downloads."
-            android:textColor="#68749C"
+            android:padding="40dp"
+            android:text="No videos in vault yet"
+            android:textColor="#6C7086"
             android:textSize="14sp"
             android:visibility="gone" />
 
+        <!-- Live Vault Videos / Downloads List -->
         <ListView
-            android:id="@+id/downloadListView"
+            android:id="@+id/vaultListView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:divider="#06070D"
-            android:dividerHeight="8dp"
-            android:padding="10dp" />
-    </FrameLayout>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#1B223C" />
-
-    <!-- Bottom 3-Tab Navigation Bar Matching Screenshot: Home | Downloading (Badge) | Videos (Badge) -->
-    <LinearLayout
-        android:id="@+id/bottomNavBar"
-        android:layout_width="match_parent"
-        android:layout_height="62dp"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:background="#0A0D18"
-        android:paddingVertical="4dp">
-
-        <!-- Tab 1: Home (Browser) -->
-        <LinearLayout
-            android:id="@+id/navHome"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
             android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="56dp"
-                android:layout_height="30dp"
-                android:gravity="center"
-                android:text="⌂"
-                android:textColor="#9AA6D1"
-                android:textSize="20sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Home"
-                android:textColor="#9AA6D1"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <!-- Tab 2: Downloading (Active Queue with Red Counter Badge) -->
-        <LinearLayout
-            android:id="@+id/navDownloading"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <FrameLayout
-                android:id="@+id/iconWrapDownloading"
-                android:layout_width="64dp"
-                android:layout_height="30dp"
-                android:background="@drawable/bg_nav_pill">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="⬇"
-                    android:textColor="#00E5FF"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvBadgeDownloading"
-                    android:layout_width="wrap_content"
-                    android:layout_height="16dp"
-                    android:layout_gravity="top|end"
-                    android:layout_marginTop="1dp"
-                    android:layout_marginEnd="6dp"
-                    android:background="@drawable/bg_badge_red"
-                    android:gravity="center"
-                    android:minWidth="16dp"
-                    android:paddingHorizontal="4dp"
-                    android:text="0"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
-            </FrameLayout>
-
-            <TextView
-                android:id="@+id/tvLabelDownloading"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Downloading"
-                android:textColor="#F0F4FF"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- Tab 3: Videos (Completed Downloads with Red Counter Badge) -->
-        <LinearLayout
-            android:id="@+id/navVideos"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <FrameLayout
-                android:id="@+id/iconWrapVideos"
-                android:layout_width="64dp"
-                android:layout_height="30dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="❐"
-                    android:textColor="#BB9AF7"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvBadgeVideos"
-                    android:layout_width="wrap_content"
-                    android:layout_height="16dp"
-                    android:layout_gravity="top|end"
-                    android:layout_marginTop="1dp"
-                    android:layout_marginEnd="4dp"
-                    android:background="@drawable/bg_badge_red"
-                    android:gravity="center"
-                    android:minWidth="16dp"
-                    android:paddingHorizontal="4dp"
-                    android:text="0"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
-            </FrameLayout>
-
-            <TextView
-                android:id="@+id/tvLabelVideos"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Videos"
-                android:textColor="#9AA6D1"
-                android:textSize="11sp" />
-        </LinearLayout>
+            android:clipToPadding="false"
+            android:divider="@android:color/transparent"
+            android:dividerHeight="10dp"
+            android:padding="14dp" />
     </LinearLayout>
-</LinearLayout>
-<!-- END OF FILE -->
+
+    <!-- Catppuccin Mocha PIN Lock Screen Overlay -->
+    <LinearLayout
+        android:id="@+id/pinLockOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#1E1E2E"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="🔒"
+            android:textColor="#CBA6F7"
+            android:textSize="38sp" />
+
+        <TextView
+            android:id="@+id/tvPinHeading"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:text="Vault Locked"
+            android:textColor="#CDD6F4"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/pinDotsRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="28dp"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/pinDot1"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginHorizontal="8dp" />
+
+            <View
+                android:id="@+id/pinDot2"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginHorizontal="8dp" />
+
+            <View
+                android:id="@+id/pinDot3"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginHorizontal="8dp" />
+
+            <View
+                android:id="@+id/pinDot4"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginHorizontal="8dp" />
+        </LinearLayout>
+
+        <GridLayout
+            android:id="@+id/pinKeypadGrid"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:columnCount="3"
+            android:rowCount="4" />
+
+        <Button
+            android:id="@+id/btnPinUnlock"
+            android:layout_width="220dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="24dp"
+            android:background="#CBA6F7"
+            android:text="Unlock"
+            android:textAllCaps="false"
+            android:textColor="#11111B"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</FrameLayout>
