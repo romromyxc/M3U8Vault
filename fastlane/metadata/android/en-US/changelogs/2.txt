@@ -1,0 +1,4 @@
+- Added custom neon app launcher icon
+- Switched default search engine to 4get
+- Added webpage bookmarks manager
+- Added PIN/Password lock for downloaded videos
