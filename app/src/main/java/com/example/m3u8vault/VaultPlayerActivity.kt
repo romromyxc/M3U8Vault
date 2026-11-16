@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -28,6 +29,7 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import java.security.MessageDigest
 import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
@@ -59,6 +61,7 @@ class VaultPlayerActivity : AppCompatActivity() {
     private lateinit var vaultAdapter: VaultAdapter
     private var showingDownloadingTab = true
     private var isFullscreen = false
+    private var isVaultUnlocked = false
     private var volumeAccum = 0f
     private var currentPlayingId: String? = null
     private val speeds = floatArrayOf(1.0f, 1.25f, 1.5f, 2.0f)
@@ -84,7 +87,6 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Screenshot & screen recording privacy lock intentionally disabled
         setContentView(R.layout.activity_vault_player)
 
         vaultHeaderBar = findViewById(R.id.vaultHeaderBar)
@@ -114,6 +116,19 @@ class VaultPlayerActivity : AppCompatActivity() {
         refreshLists(initialAutoSelect = true)
     }
 
+    private fun hashSecret(secret: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(secret.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun getSavedLockHash(): String? =
+        getSharedPreferences("m3u8vault_prefs", Context.MODE_PRIVATE)
+            .getString("vault_lock_hash", null)
+
+    private fun isLockEnabled(): Boolean = !getSavedLockHash().isNullOrBlank()
+
+    private fun isVideosFolderLocked(): Boolean = isLockEnabled() && !isVaultUnlocked
+
     private fun setupButtons() {
         findViewById<LinearLayout>(R.id.navHome).setOnClickListener { finish() }
 
@@ -124,9 +139,23 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
 
         findViewById<LinearLayout>(R.id.navVideos).setOnClickListener {
-            showingDownloadingTab = false
-            updateBottomNavVisuals()
-            refreshLists()
+            if (isVideosFolderLocked()) {
+                promptUnlockVideos {
+                    showingDownloadingTab = false
+                    updateBottomNavVisuals()
+                    refreshLists()
+                }
+            } else {
+                showingDownloadingTab = false
+                updateBottomNavVisuals()
+                refreshLists()
+            }
+        }
+
+        tvEmptyVault.setOnClickListener {
+            if (!showingDownloadingTab && isVideosFolderLocked()) {
+                promptUnlockVideos { refreshLists() }
+            }
         }
 
         findViewById<Button>(R.id.btnStreamOnline).setOnClickListener { showStreamOnlineDialog() }
@@ -162,7 +191,11 @@ class VaultPlayerActivity : AppCompatActivity() {
     }
 
     private fun updateBottomNavVisuals() {
-        tvHeaderTitle.text = if (showingDownloadingTab) "Downloading" else "Videos"
+        tvHeaderTitle.text = when {
+            showingDownloadingTab -> "Downloading"
+            isVideosFolderLocked() -> "Videos (Locked)"
+            else -> "Videos"
+        }
         if (showingDownloadingTab) {
             iconWrapDownloading.setBackgroundResource(R.drawable.bg_nav_pill)
             iconWrapVideos.background = null
@@ -190,25 +223,162 @@ class VaultPlayerActivity : AppCompatActivity() {
     }
 
     private fun showHeaderMenu() {
-        val options = arrayOf(
-            "⏸ Pause All Downloads",
-            "▶ Resume All Downloads",
-            "🔗 Stream Online .m3u8 URL",
-            "⌂ Back to Browser (Home)"
-        )
+        val lockEnabled = isLockEnabled()
+        val options = when {
+            !lockEnabled -> arrayOf(
+                "⏸ Pause All Downloads",
+                "▶ Resume All Downloads",
+                "🔒 Set Video Folder PIN / Password",
+                "🔗 Stream Online .m3u8 URL",
+                "⌂ Back to Browser (Home)"
+            )
+            !isVaultUnlocked -> arrayOf(
+                "⏸ Pause All Downloads",
+                "▶ Resume All Downloads",
+                "🔓 Unlock Video Folder",
+                "🔑 Change / Remove PIN or Password",
+                "🔗 Stream Online .m3u8 URL",
+                "⌂ Back to Browser (Home)"
+            )
+            else -> arrayOf(
+                "⏸ Pause All Downloads",
+                "▶ Resume All Downloads",
+                "🔒 Lock Video Folder Now",
+                "🔑 Change / Remove PIN or Password",
+                "🔗 Stream Online .m3u8 URL",
+                "⌂ Back to Browser (Home)"
+            )
+        }
+
         AlertDialog.Builder(this)
             .setTitle("Download Manager")
             .setItems(options) { _, which ->
-                when (which) {
-                    0 -> allCachedDownloads.filter { it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED }
-                        .forEach { VaultEngine.pauseDownload(this, it.request.id) }
-                    1 -> allCachedDownloads.filter { it.state == Download.STATE_STOPPED || it.state == Download.STATE_FAILED }
-                        .forEach { VaultEngine.resumeDownload(this, it.request.id) }
-                    2 -> showStreamOnlineDialog()
-                    3 -> finish()
+                when (options[which]) {
+                    "⏸ Pause All Downloads" -> {
+                        allCachedDownloads.filter { it.state == Download.STATE_DOWNLOADING || it.state == Download.STATE_QUEUED }
+                            .forEach { VaultEngine.pauseDownload(this, it.request.id) }
+                        uiHandler.postDelayed({ refreshLists() }, 300L)
+                    }
+                    "▶ Resume All Downloads" -> {
+                        allCachedDownloads.filter { it.state == Download.STATE_STOPPED || it.state == Download.STATE_FAILED }
+                            .forEach { VaultEngine.resumeDownload(this, it.request.id) }
+                        uiHandler.postDelayed({ refreshLists() }, 300L)
+                    }
+                    "🔒 Set Video Folder PIN / Password" -> showSetLockDialog()
+                    "🔓 Unlock Video Folder" -> promptUnlockVideos {
+                        showingDownloadingTab = false
+                        updateBottomNavVisuals()
+                        refreshLists()
+                    }
+                    "🔒 Lock Video Folder Now" -> {
+                        isVaultUnlocked = false
+                        showingDownloadingTab = true
+                        updateBottomNavVisuals()
+                        refreshLists()
+                        Toast.makeText(this, "Video folder locked", Toast.LENGTH_SHORT).show()
+                    }
+                    "🔑 Change / Remove PIN or Password" -> showManageLockDialog()
+                    "🔗 Stream Online .m3u8 URL" -> showStreamOnlineDialog()
+                    "⌂ Back to Browser (Home)" -> finish()
                 }
-                uiHandler.postDelayed({ refreshLists() }, 300L)
             }.show()
+    }
+
+    private fun showSetLockDialog() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 20, 36, 8)
+        }
+        val etPass1 = EditText(this).apply {
+            hint = "Enter PIN or Password (min 4 chars)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val etPass2 = EditText(this).apply {
+            hint = "Confirm PIN or Password"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        box.addView(etPass1)
+        box.addView(etPass2)
+
+        AlertDialog.Builder(this)
+            .setTitle("Lock Video Folder")
+            .setView(box)
+            .setPositiveButton("Save & Lock") { _, _ ->
+                val p1 = etPass1.text.toString()
+                val p2 = etPass2.text.toString()
+                when {
+                    p1.length < 4 -> Toast.makeText(this, "Use at least 4 characters", Toast.LENGTH_SHORT).show()
+                    p1 != p2 -> Toast.makeText(this, "PIN / Password did not match", Toast.LENGTH_SHORT).show()
+                    else -> {
+                        getSharedPreferences("m3u8vault_prefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .putString("vault_lock_hash", hashSecret(p1))
+                            .apply()
+                        isVaultUnlocked = false
+                        showingDownloadingTab = true
+                        updateBottomNavVisuals()
+                        refreshLists()
+                        Toast.makeText(this, "Video folder locked!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun promptUnlockVideos(onUnlocked: () -> Unit) {
+        val savedHash = getSavedLockHash() ?: run {
+            isVaultUnlocked = true
+            onUnlocked()
+            return
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 20, 36, 8)
+        }
+        val etInput = EditText(this).apply {
+            hint = "Enter PIN or Password"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        box.addView(etInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("🔒 Unlock Video Folder")
+            .setView(box)
+            .setPositiveButton("Unlock") { _, _ ->
+                val entered = etInput.text.toString()
+                if (hashSecret(entered) == savedHash) {
+                    isVaultUnlocked = true
+                    onUnlocked()
+                } else {
+                    Toast.makeText(this, "Incorrect PIN or Password", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showManageLockDialog() {
+        promptUnlockVideos {
+            AlertDialog.Builder(this)
+                .setTitle("Video Folder Lock Settings")
+                .setItems(arrayOf("🔄 Change PIN / Password", "🗑 Remove Lock")) { _, which ->
+                    if (which == 0) {
+                        showSetLockDialog()
+                    } else {
+                        getSharedPreferences("m3u8vault_prefs", Context.MODE_PRIVATE)
+                            .edit()
+                            .remove("vault_lock_hash")
+                            .apply()
+                        isVaultUnlocked = false
+                        updateBottomNavVisuals()
+                        refreshLists()
+                        Toast.makeText(this, "Video folder lock removed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun toggleFullscreen() {
@@ -432,15 +602,28 @@ class VaultPlayerActivity : AppCompatActivity() {
         val videosList = allCachedDownloads.filter { it.state == Download.STATE_COMPLETED }
 
         if (initialAutoSelect) {
-            showingDownloadingTab = downloadingList.isNotEmpty()
+            showingDownloadingTab = if (isVideosFolderLocked()) true else downloadingList.isNotEmpty()
             updateBottomNavVisuals()
         }
 
         tvBadgeDownloading.text = downloadingList.size.toString()
         tvBadgeDownloading.visibility = if (downloadingList.isNotEmpty()) View.VISIBLE else View.GONE
 
-        tvBadgeVideos.text = videosList.size.toString()
-        tvBadgeVideos.visibility = if (videosList.isNotEmpty()) View.VISIBLE else View.GONE
+        if (isVideosFolderLocked()) {
+            tvBadgeVideos.text = "🔒"
+            tvBadgeVideos.visibility = View.VISIBLE
+        } else {
+            tvBadgeVideos.text = videosList.size.toString()
+            tvBadgeVideos.visibility = if (videosList.isNotEmpty()) View.VISIBLE else View.GONE
+        }
+
+        if (!showingDownloadingTab && isVideosFolderLocked()) {
+            visibleItems.clear()
+            tvEmptyVault.visibility = View.VISIBLE
+            tvEmptyVault.text = "🔒 Video Folder is Locked\nTap here or tap Videos below to enter PIN / Password."
+            vaultAdapter.notifyDataSetChanged()
+            return
+        }
 
         visibleItems.clear()
         visibleItems.addAll(if (showingDownloadingTab) downloadingList else videosList)
@@ -466,6 +649,13 @@ class VaultPlayerActivity : AppCompatActivity() {
         VaultEngine.getDownloadManager(this).removeListener(downloadListener)
         uiHandler.removeCallbacks(refreshRunnable)
         player?.pause()
+        if (isLockEnabled() && playerContainer.visibility != View.VISIBLE) {
+            isVaultUnlocked = false
+            if (!showingDownloadingTab) {
+                showingDownloadingTab = true
+                updateBottomNavVisuals()
+            }
+        }
     }
 
     override fun onDestroy() {
