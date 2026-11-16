@@ -14,6 +14,8 @@ import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
@@ -347,6 +349,99 @@ class BrowserActivity : AppCompatActivity() {
         tab.webView.loadUrl(BrowserHelper.resolveInput(input, searxngBaseUrl))
     }
 
+    private fun getSavedBookmarks(): MutableList<Pair<String, String>> {
+        val prefs = getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+        val raw = prefs.getString("bookmarks_json", "[]") ?: "[]"
+        val list = mutableListOf<Pair<String, String>>()
+        runCatching {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val title = obj.optString("title").ifBlank { obj.optString("url") }
+                val url = obj.optString("url")
+                if (url.isNotBlank()) list.add(title to url)
+            }
+        }
+        return list
+    }
+
+    private fun saveBookmarksList(list: List<Pair<String, String>>) {
+        val arr = JSONArray()
+        for ((title, url) in list) {
+            arr.put(JSONObject().apply {
+                put("title", title)
+                put("url", url)
+            })
+        }
+        getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+            .edit()
+            .putString("bookmarks_json", arr.toString())
+            .apply()
+    }
+
+    private fun bookmarkCurrentPage() {
+        val wv = currentTab()?.webView ?: return
+        val currentUrl = wv.url?.trim().orEmpty()
+        if (!currentUrl.startsWith("http")) {
+            Toast.makeText(this, "Open a webpage first to bookmark it", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val defaultName = wv.title?.trim()?.take(45)?.ifBlank { currentUrl } ?: currentUrl
+
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 20, 36, 8)
+        }
+        val etName = EditText(this).apply {
+            setText(defaultName)
+            hint = "Bookmark name"
+        }
+        box.addView(etName)
+
+        AlertDialog.Builder(this)
+            .setTitle("Add Bookmark")
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val name = etName.text.toString().trim().ifBlank { defaultName }
+                val list = getSavedBookmarks()
+                list.removeAll { it.second == currentUrl }
+                list.add(0, name to currentUrl)
+                saveBookmarksList(list)
+                Toast.makeText(this, "Bookmarked: $name", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showBookmarksDialog() {
+        val list = getSavedBookmarks()
+        if (list.isEmpty()) {
+            Toast.makeText(this, "No bookmarks saved yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = list.map { "⭐ ${it.first}\n     ${it.second.take(42)}" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("Saved Bookmarks (${list.size})")
+            .setItems(labels) { _, which ->
+                loadInCurrentTab(list[which].second)
+            }
+            .setNeutralButton("Delete One") { _, _ ->
+                val delLabels = list.map { "🗑 ${it.first}" }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("Tap Bookmark to Delete")
+                    .setItems(delLabels) { _, idx ->
+                        val removed = list.removeAt(idx)
+                        saveBookmarksList(list)
+                        Toast.makeText(this, "Deleted: ${removed.first}", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun showTabSwitcher() {
         val listView = ListView(this).apply {
             divider = null
@@ -406,6 +501,8 @@ class BrowserActivity : AppCompatActivity() {
             if (wv?.canGoForward() == true) "▶ Forward" else "▶ Forward (Disabled)",
             "⌂ 4get Home",
             "+ New Window / Tab",
+            "⭐ Bookmark This Page",
+            "🔖 Saved Bookmarks",
             if (adShieldEnabled) "🛡 Ad & Redirect Shield: ON" else "🛡 Ad & Redirect Shield: OFF",
             if (desktopMode) "🖥 Desktop Site: ON" else "🖥 Desktop Site: OFF",
             "🔍 Change Search Engine",
@@ -420,23 +517,25 @@ class BrowserActivity : AppCompatActivity() {
                     0 -> wv?.takeIf { it.canGoForward() }?.goForward()
                     1 -> loadInCurrentTab(searxngBaseUrl)
                     2 -> openNewTab(searxngBaseUrl)
-                    3 -> {
+                    3 -> bookmarkCurrentPage()
+                    4 -> showBookmarksDialog()
+                    5 -> {
                         adShieldEnabled = !adShieldEnabled
                         Toast.makeText(this, if (adShieldEnabled) "Shield ON" else "Shield OFF", Toast.LENGTH_SHORT).show()
                     }
-                    4 -> {
+                    6 -> {
                         desktopMode = !desktopMode
                         wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
                         wv?.reload()
                     }
-                    5 -> AlertDialog.Builder(this)
+                    7 -> AlertDialog.Builder(this)
                         .setTitle("Select Search Engine")
                         .setItems(BrowserHelper.SEARXNG_INSTANCES) { _, i ->
                             searxngBaseUrl = BrowserHelper.SEARXNG_INSTANCES[i]
                             loadInCurrentTab(searxngBaseUrl)
                         }.show()
-                    6 -> showManualPasteDialog()
-                    7 -> {
+                    8 -> showManualPasteDialog()
+                    9 -> {
                         currentTab()?.let { t -> synchronized(t.streams) { t.streams.clear() } }
                         updateBadge()
                         Toast.makeText(this, "Stream list cleared", Toast.LENGTH_SHORT).show()
