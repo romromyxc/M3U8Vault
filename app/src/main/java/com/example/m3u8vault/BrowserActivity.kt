@@ -168,6 +168,21 @@ class BrowserActivity : AppCompatActivity() {
         if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
     }
 
+    private fun isNonVideoDocument(fileName: String, mimetype: String?): Boolean {
+        val lowerName = fileName.lowercase()
+        val lowerMime = mimetype?.lowercase().orEmpty()
+        val nonVideoExts = listOf(
+            ".pdf", ".zip", ".rar", ".7z", ".apk", ".txt", ".doc", ".docx",
+            ".xls", ".xlsx", ".jpg", ".jpeg", ".png", ".webp", ".gif",
+            ".mp3", ".m4a", ".aac", ".ogg"
+        )
+        if (nonVideoExts.any { lowerName.endsWith(it) }) return true
+        if (lowerMime.startsWith("image/") || lowerMime.startsWith("audio/") || lowerMime.startsWith("text/") || lowerMime == "application/pdf" || lowerMime == "application/zip") {
+            return true
+        }
+        return false
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun openNewTab(initialUrl: String? = searxngBaseUrl): BrowserTab {
         val wv = WebView(this).apply {
@@ -198,26 +213,45 @@ class BrowserActivity : AppCompatActivity() {
                 return@setDownloadListener
             }
             val guessedName = URLUtil.guessFileName(url, contentDisposition, mimetype)
+            val cleanDefaultTitle = guessedName.substringBeforeLast(".").ifBlank {
+                wv.title?.trim()?.take(40)?.ifBlank { "Vault_Video" } ?: "Vault_Video"
+            }
             val referer = wv.url.orEmpty()
             val cookies = safeCookies(url)
+            val isDocument = isNonVideoDocument(guessedName, mimetype)
 
             val box = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(36, 20, 36, 8)
             }
             val etFileName = EditText(this).apply {
-                setText(guessedName)
-                hint = "File name"
+                setText(if (isDocument) guessedName else cleanDefaultTitle)
+                hint = if (isDocument) "File name" else "Video title in Vault"
             }
             box.addView(etFileName)
 
             AlertDialog.Builder(this)
-                .setTitle("Download File")
+                .setTitle(if (isDocument) "Download File" else "Save Video to Private Vault")
                 .setMessage(url.take(65))
                 .setView(box)
-                .setPositiveButton("Download") { _, _ ->
-                    val finalName = etFileName.text.toString().trim().ifBlank { guessedName }
-                    startSystemDownload(url, finalName, userAgent, referer, cookies, mimetype)
+                .setPositiveButton(if (isDocument) "Download" else "Save to Vault") { _, _ ->
+                    if (isDocument) {
+                        val finalName = etFileName.text.toString().trim().ifBlank { guessedName }
+                        startPublicFileDownload(url, finalName, userAgent, referer, cookies, mimetype)
+                    } else {
+                        val finalTitle = etFileName.text.toString().trim().ifBlank { cleanDefaultTitle }
+                        val headers = StreamHeaders(referer, userAgent, cookies)
+                        runCatching {
+                            if (BrowserHelper.isHlsStream(url, mimetype.orEmpty())) {
+                                VaultEngine.enqueueM3u8Download(this, finalTitle, url, headers)
+                            } else {
+                                VaultEngine.enqueueDirectVideoDownload(this, finalTitle, url, mimetype, headers)
+                            }
+                            Toast.makeText(this, "Downloading to Private Vault: $finalTitle", Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(this, "Vault queue error: ${it.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -390,7 +424,7 @@ class BrowserActivity : AppCompatActivity() {
         return tab
     }
 
-    private fun startSystemDownload(
+    private fun startPublicFileDownload(
         url: String,
         fileName: String,
         userAgent: String,
@@ -415,7 +449,7 @@ class BrowserActivity : AppCompatActivity() {
             }
             val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
             dm.enqueue(request)
-            Toast.makeText(this, "Downloading: $fileName", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Downloading file: $fileName", Toast.LENGTH_SHORT).show()
         }.onFailure {
             Toast.makeText(this, "Download failed: ${it.message}", Toast.LENGTH_LONG).show()
         }
@@ -671,27 +705,32 @@ class BrowserActivity : AppCompatActivity() {
         val pageUrl = tab.webView.url.orEmpty()
         val ua = runCatching { tab.webView.settings.userAgentString }.getOrDefault(BrowserHelper.MOBILE_UA)
         val cookies = safeCookies(pageUrl)
-        val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "HLS_Video" } ?: "HLS_Video"
+        val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "Vault_Video" } ?: "Vault_Video"
 
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(36, 20, 36, 10)
         }
         val etTitle = EditText(this).apply { setText(defaultTitle); hint = "Video title" }
-        val etUrl = EditText(this).apply { hint = "https://.../playlist.m3u8" }
+        val etUrl = EditText(this).apply { hint = "https://.../playlist.m3u8 or .mp4" }
         box.addView(etTitle)
         box.addView(etUrl)
 
         AlertDialog.Builder(this)
-            .setTitle("Download Direct M3U8 URL")
+            .setTitle("Download Direct Video / M3U8 URL")
             .setView(box)
             .setPositiveButton("Queue") { _, _ ->
                 val url = etUrl.text.toString().trim()
                 val name = etTitle.text.toString().trim().ifBlank { defaultTitle }
                 if (url.startsWith("http")) {
+                    val headers = StreamHeaders(pageUrl, ua, cookies)
                     runCatching {
-                        VaultEngine.enqueueM3u8Download(this, name, url, StreamHeaders(pageUrl, ua, cookies))
-                        Toast.makeText(this, "Added to Downloading", Toast.LENGTH_SHORT).show()
+                        if (BrowserHelper.isHlsStream(url)) {
+                            VaultEngine.enqueueM3u8Download(this, name, url, headers)
+                        } else {
+                            VaultEngine.enqueueDirectVideoDownload(this, name, url, null, headers)
+                        }
+                        Toast.makeText(this, "Added to Vault Downloading", Toast.LENGTH_SHORT).show()
                     }.onFailure {
                         Toast.makeText(this, "Queue error: ${it.message}", Toast.LENGTH_LONG).show()
                     }
