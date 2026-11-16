@@ -46,8 +46,8 @@ class BrowserActivity : AppCompatActivity() {
 
     private data class StreamOption(
         val label: String,
-        val qualityBadge: String,
         val url: String,
+        val qualityBadge: String = "",
         val sortHeight: Int = 0
     )
 
@@ -1018,7 +1018,7 @@ class BrowserActivity : AppCompatActivity() {
                     val q = detectQualityFromUrl(u)
                     val label = if (q != null) "$q • ${u.takeLast(28)}" else "Stream #${idx + 1} • ${u.takeLast(32)}"
                     val h = q?.removeSuffix("p")?.toIntOrNull() ?: 0
-                    options.add(StreamOption(label, u, h, h))
+                    options.add(StreamOption(label, u, q.orEmpty(), h))
                 }
             }
 
