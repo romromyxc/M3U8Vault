@@ -36,17 +36,13 @@ class VaultPlayerActivity : AppCompatActivity() {
     private lateinit var vaultPlayerView: PlayerView
     private lateinit var tvNowPlaying: TextView
     private lateinit var btnAutoNext: Button
+    private lateinit var btnLockVault: Button
     private lateinit var vaultTopBar: View
-    private lateinit var vaultTabsBar: View
     private lateinit var vaultListView: ListView
     private lateinit var tvEmptyVault: TextView
-    private lateinit var tvTabVideos: TextView
-    private lateinit var tvTabDownloading: TextView
-    private lateinit var indTabVideos: View
-    private lateinit var indTabDownloading: View
     private lateinit var btnExitFullscreenOverlay: Button
 
-    private lateinit var pinLockOverlay: LinearLayout
+    private lateinit var pinLockScroll: ScrollView
     private lateinit var tvPinHeading: TextView
     private lateinit var btnPinUnlock: Button
     private lateinit var pinDots: List<View>
@@ -55,9 +51,9 @@ class VaultPlayerActivity : AppCompatActivity() {
     private var completedVideos: List<Download> = emptyList()
     private var activeDownloads: List<Download> = emptyList()
     private var currentPlayingId: String? = null
-    private var showingDownloadingTab = false
     private var autoAdvanceEnabled = true
     private var isFullscreen = false
+    private var isUnlockedSession = false
 
     private var enteredPin = ""
     private var settingNewPinMode = false
@@ -84,22 +80,20 @@ class VaultPlayerActivity : AppCompatActivity() {
         window.navigationBarColor = Color.parseColor("#1E1E2E")
         setContentView(R.layout.activity_vault_player)
 
+        isUnlockedSession = savedInstanceState?.getBoolean("is_unlocked_session", false) ?: false
+
         playerSection = findViewById(R.id.playerSection)
         playerFrame = findViewById(R.id.playerFrame)
         quickSwitchBar = findViewById(R.id.quickSwitchBar)
         vaultPlayerView = findViewById(R.id.vaultPlayerView)
         tvNowPlaying = findViewById(R.id.tvNowPlaying)
         btnAutoNext = findViewById(R.id.btnAutoNext)
+        btnLockVault = findViewById(R.id.btnLockVault)
         vaultTopBar = findViewById(R.id.vaultTopBar)
-        vaultTabsBar = findViewById(R.id.vaultTabsBar)
         vaultListView = findViewById(R.id.vaultListView)
         tvEmptyVault = findViewById(R.id.tvEmptyVault)
-        tvTabVideos = findViewById(R.id.tvTabVideos)
-        tvTabDownloading = findViewById(R.id.tvTabDownloading)
-        indTabVideos = findViewById(R.id.indTabVideos)
-        indTabDownloading = findViewById(R.id.indTabDownloading)
 
-        pinLockOverlay = findViewById(R.id.pinLockOverlay)
+        pinLockScroll = findViewById(R.id.pinLockScroll)
         tvPinHeading = findViewById(R.id.tvPinHeading)
         btnPinUnlock = findViewById(R.id.btnPinUnlock)
         pinDots = listOf(
@@ -138,6 +132,11 @@ class VaultPlayerActivity : AppCompatActivity() {
         reloadDownloadsList()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("is_unlocked_session", isUnlockedSession)
+    }
+
     private fun dp(v: Float): Float = v * resources.displayMetrics.density
     private fun dpInt(v: Float): Int = (v * resources.displayMetrics.density).toInt()
 
@@ -155,12 +154,12 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btnVaultBack).backgroundTintList = null
-        findViewById<Button>(R.id.btnLockVault).backgroundTintList = null
+        btnLockVault.backgroundTintList = null
 
         btnPinUnlock.backgroundTintList = null
         btnPinUnlock.background = GradientDrawable().apply {
             setColor(Color.parseColor("#CBA6F7"))
-            cornerRadius = dp(24f)
+            cornerRadius = dp(22f)
         }
     }
 
@@ -195,6 +194,15 @@ class VaultPlayerActivity : AppCompatActivity() {
         vaultPlayerView.player = exoPlayer
     }
 
+    private fun isPinEnabled(): Boolean {
+        val prefs = getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+        return prefs.getBoolean("vault_pin_enabled", false) && getSavedPin().length == 4
+    }
+
+    private fun updateLockIcon() {
+        btnLockVault.text = if (isPinEnabled()) "🔒" else "🔓"
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private fun setupControls() {
         findViewById<Button>(R.id.btnVaultBack).setOnClickListener {
@@ -207,37 +215,44 @@ class VaultPlayerActivity : AppCompatActivity() {
             btnAutoNext.setTextColor(Color.parseColor(if (autoAdvanceEnabled) "#A6E3A1" else "#6C7086"))
         }
 
-        findViewById<Button>(R.id.btnLockVault).setOnClickListener {
-            exoPlayer?.pause()
-            showPinOverlay(forceReset = false)
+        btnLockVault.setOnClickListener {
+            if (isPinEnabled()) {
+                exoPlayer?.pause()
+                isUnlockedSession = false
+                showPinOverlay(forceReset = false)
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("Optional Vault PIN Lock")
+                    .setMessage("PIN lock is currently OFF. Would you like to set a 4-digit PIN?")
+                    .setPositiveButton("Set 4-Digit PIN") { _, _ ->
+                        exoPlayer?.pause()
+                        showPinOverlay(forceReset = true)
+                    }
+                    .setNegativeButton("Keep Unlocked", null)
+                    .show()
+            }
         }
 
-        findViewById<Button>(R.id.btnLockVault).setOnLongClickListener {
+        btnLockVault.setOnLongClickListener {
+            if (!isPinEnabled()) return@setOnLongClickListener false
             AlertDialog.Builder(this)
-                .setTitle("Change 4-Digit Vault PIN?")
-                .setPositiveButton("Change PIN") { _, _ ->
-                    exoPlayer?.pause()
-                    showPinOverlay(forceReset = true)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+                .setTitle("Vault PIN Options")
+                .setItems(arrayOf("Change 4-Digit PIN", "Turn Off PIN Lock")) { _, which ->
+                    if (which == 0) {
+                        exoPlayer?.pause()
+                        showPinOverlay(forceReset = true)
+                    } else {
+                        getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+                            .edit().putBoolean("vault_pin_enabled", false).apply()
+                        updateLockIcon()
+                        Toast.makeText(this, "Vault PIN Lock Turned Off", Toast.LENGTH_SHORT).show()
+                    }
+                }.show()
             true
         }
 
         findViewById<Button>(R.id.btnPlaylistPopup).setOnClickListener { showQuickPlaylistBottomSheet() }
         findViewById<Button>(R.id.btnFullscreen).setOnClickListener { toggleFullscreen(!isFullscreen) }
-
-        findViewById<View>(R.id.tabVideos).setOnClickListener {
-            showingDownloadingTab = false
-            updateTabIndicators()
-            renderList()
-        }
-
-        findViewById<View>(R.id.tabDownloading).setOnClickListener {
-            showingDownloadingTab = true
-            updateTabIndicators()
-            renderList()
-        }
 
         var verticalSwiped = false
         val swipeDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -254,11 +269,7 @@ class VaultPlayerActivity : AppCompatActivity() {
                 val diffX = e2.x - e1.x
                 if (abs(diffY) > abs(diffX) * 1.3f && abs(diffY) > dp(45f) && abs(velocityY) > 150f) {
                     verticalSwiped = true
-                    if (diffY < 0) {
-                        playAdjacentVideo(1)
-                    } else {
-                        playAdjacentVideo(-1)
-                    }
+                    if (diffY < 0) playAdjacentVideo(1) else playAdjacentVideo(-1)
                     return true
                 }
                 return false
@@ -282,7 +293,6 @@ class VaultPlayerActivity : AppCompatActivity() {
         if (enable) {
             vaultTopBar.visibility = View.GONE
             quickSwitchBar.visibility = View.GONE
-            vaultTabsBar.visibility = View.GONE
             vaultListView.visibility = View.GONE
             tvEmptyVault.visibility = View.GONE
             btnExitFullscreenOverlay.visibility = View.VISIBLE
@@ -307,7 +317,6 @@ class VaultPlayerActivity : AppCompatActivity() {
             btnExitFullscreenOverlay.visibility = View.GONE
             vaultTopBar.visibility = View.VISIBLE
             quickSwitchBar.visibility = View.VISIBLE
-            vaultTabsBar.visibility = View.VISIBLE
             vaultListView.visibility = View.VISIBLE
 
             playerSection.layoutParams = LinearLayout.LayoutParams(
@@ -318,7 +327,7 @@ class VaultPlayerActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dpInt(220f)
             )
-            renderList()
+            renderUnifiedList()
         }
     }
 
@@ -345,7 +354,7 @@ class VaultPlayerActivity : AppCompatActivity() {
         val savedPos = VaultEngine.getPlaybackPosition(this, id)
         if (savedPos > 1000L) player.seekTo(savedPos)
         player.playWhenReady = true
-        renderList()
+        renderUnifiedList()
     }
 
     private fun playAdjacentVideo(offset: Int) {
@@ -444,40 +453,29 @@ class VaultPlayerActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun updateTabIndicators() {
-        tvTabVideos.setTextColor(Color.parseColor(if (!showingDownloadingTab) "#CBA6F7" else "#6C7086"))
-        tvTabVideos.typeface = if (!showingDownloadingTab) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        indTabVideos.setBackgroundColor(if (!showingDownloadingTab) Color.parseColor("#CBA6F7") else Color.TRANSPARENT)
-
-        tvTabDownloading.setTextColor(Color.parseColor(if (showingDownloadingTab) "#CBA6F7" else "#6C7086"))
-        tvTabDownloading.typeface = if (showingDownloadingTab) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        indTabDownloading.setBackgroundColor(if (showingDownloadingTab) Color.parseColor("#CBA6F7") else Color.TRANSPARENT)
-    }
-
     private fun reloadDownloadsList() {
         val all = VaultEngine.getAllDownloads(this)
-        completedVideos = all.filter { it.state == Download.STATE_COMPLETED }
         activeDownloads = all.filter { it.state != Download.STATE_COMPLETED }
-        tvTabVideos.text = "Videos (${completedVideos.size})"
-        tvTabDownloading.text = "Downloading (${activeDownloads.size})"
-        if (!isFullscreen) renderList()
+        completedVideos = all.filter { it.state == Download.STATE_COMPLETED }
+        if (!isFullscreen) renderUnifiedList()
     }
 
-    private fun renderList() {
-        val items = if (showingDownloadingTab) activeDownloads else completedVideos
-        tvEmptyVault.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-        tvEmptyVault.text = if (showingDownloadingTab) "No active downloads" else "No saved videos in vault yet"
+    private fun renderUnifiedList() {
+        // Single unified list: active downloads at top (only when running), followed by saved videos
+        val unifiedItems = activeDownloads + completedVideos
+        tvEmptyVault.visibility = if (unifiedItems.isEmpty()) View.VISIBLE else View.GONE
 
         vaultListView.adapter = object : BaseAdapter() {
-            override fun getCount() = items.size
-            override fun getItem(pos: Int) = items[pos]
-            override fun getItemId(pos: Int) = items[pos].request.id.hashCode().toLong()
+            override fun getCount() = unifiedItems.size
+            override fun getItem(pos: Int) = unifiedItems[pos]
+            override fun getItemId(pos: Int) = unifiedItems[pos].request.id.hashCode().toLong()
 
             override fun getView(pos: Int, convertView: View?, parent: ViewGroup): View {
-                val dl = items[pos]
+                val dl = unifiedItems[pos]
                 val id = dl.request.id
+                val isDownloadingItem = dl.state != Download.STATE_COMPLETED
                 val title = dl.request.data.toString(Charsets.UTF_8).ifBlank { "Vault Video" }
-                val isPlaying = id == currentPlayingId && !showingDownloadingTab
+                val isPlaying = id == currentPlayingId && !isDownloadingItem
 
                 val card = LinearLayout(this@VaultPlayerActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -497,9 +495,9 @@ class VaultPlayerActivity : AppCompatActivity() {
                 }
 
                 val iconBadge = TextView(this@VaultPlayerActivity).apply {
-                    text = if (showingDownloadingTab) "⬇" else if (isPlaying) "▶" else "🎬"
+                    text = if (isDownloadingItem) "⬇" else if (isPlaying) "▶" else "🎬"
                     textSize = 16f
-                    setTextColor(Color.parseColor(if (isPlaying) "#A6E3A1" else "#CBA6F7"))
+                    setTextColor(Color.parseColor(if (isPlaying || isDownloadingItem) "#A6E3A1" else "#CBA6F7"))
                     setPadding(0, 0, dpInt(10f), 0)
                 }
                 topRow.addView(iconBadge)
@@ -520,12 +518,12 @@ class VaultPlayerActivity : AppCompatActivity() {
 
                 val pct = dl.percentDownloaded.coerceIn(0f, 100f).toInt()
                 val sizeStr = VaultEngine.formatSize(dl.bytesDownloaded)
-                val statusText = if (showingDownloadingTab) {
+                val statusText = if (isDownloadingItem) {
                     val stateLabel = when (dl.state) {
                         Download.STATE_STOPPED -> "Paused"
                         Download.STATE_FAILED -> "Failed"
                         Download.STATE_QUEUED -> "Queued"
-                        else -> "$pct%"
+                        else -> "Downloading $pct%"
                     }
                     "$stateLabel • $sizeStr"
                 } else {
@@ -540,7 +538,7 @@ class VaultPlayerActivity : AppCompatActivity() {
                 infoCol.addView(tvSub)
                 topRow.addView(infoCol)
 
-                if (showingDownloadingTab) {
+                if (isDownloadingItem) {
                     val isPaused = dl.state == Download.STATE_STOPPED || dl.state == Download.STATE_FAILED
                     val btnToggle = Button(this@VaultPlayerActivity).apply {
                         text = if (isPaused) "▶" else "⏸"
@@ -584,7 +582,7 @@ class VaultPlayerActivity : AppCompatActivity() {
                 topRow.addView(btnDelete)
                 card.addView(topRow)
 
-                if (showingDownloadingTab) {
+                if (isDownloadingItem) {
                     val bar = ProgressBar(this@VaultPlayerActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                         max = 100
                         progress = pct
@@ -616,7 +614,10 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     private fun savePin(pin: String) {
         getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
-            .edit().putString("vault_pin", pin).apply()
+            .edit()
+            .putString("vault_pin", pin)
+            .putBoolean("vault_pin_enabled", true)
+            .apply()
     }
 
     private fun setupPinScreen() {
@@ -626,14 +627,14 @@ class VaultPlayerActivity : AppCompatActivity() {
         keys.forEach { key ->
             val btn = Button(this).apply {
                 text = key
-                textSize = 20f
+                textSize = 18f
                 setTextColor(Color.parseColor("#CDD6F4"))
                 backgroundTintList = null
                 setPadding(0, 0, 0, 0)
                 layoutParams = GridLayout.LayoutParams().apply {
-                    width = dpInt(68f)
-                    height = dpInt(68f)
-                    setMargins(dpInt(10f), dpInt(8f), dpInt(10f), dpInt(8f))
+                    width = dpInt(60f)
+                    height = dpInt(60f)
+                    setMargins(dpInt(8f), dpInt(6f), dpInt(8f), dpInt(6f))
                 }
                 if (key.isEmpty()) {
                     visibility = View.INVISIBLE
@@ -649,7 +650,14 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
 
         btnPinUnlock.setOnClickListener { verifyOrSavePin() }
-        showPinOverlay(forceReset = false)
+        updateLockIcon()
+
+        // Optional PIN: only lock if the user explicitly turned PIN lock ON
+        if (isPinEnabled() && !isUnlockedSession) {
+            showPinOverlay(forceReset = false)
+        } else {
+            pinLockScroll.visibility = View.GONE
+        }
     }
 
     private fun updatePinDots() {
@@ -674,7 +682,7 @@ class VaultPlayerActivity : AppCompatActivity() {
         tvPinHeading.text = if (settingNewPinMode) "Set 4-Digit Vault PIN" else "Vault Locked"
         btnPinUnlock.text = if (settingNewPinMode) "Save PIN" else "Unlock"
         updatePinDots()
-        pinLockOverlay.visibility = View.VISIBLE
+        pinLockScroll.visibility = View.VISIBLE
     }
 
     private fun onPinKeyPress(key: String) {
@@ -696,10 +704,13 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
         if (settingNewPinMode) {
             savePin(enteredPin)
-            pinLockOverlay.visibility = View.GONE
+            isUnlockedSession = true
+            updateLockIcon()
+            pinLockScroll.visibility = View.GONE
             Toast.makeText(this, "Vault PIN Saved", Toast.LENGTH_SHORT).show()
         } else if (enteredPin == getSavedPin()) {
-            pinLockOverlay.visibility = View.GONE
+            isUnlockedSession = true
+            pinLockScroll.visibility = View.GONE
         } else {
             enteredPin = ""
             updatePinDots()
@@ -709,6 +720,7 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        updateLockIcon()
         refreshHandler.post(refreshRunnable)
     }
 
