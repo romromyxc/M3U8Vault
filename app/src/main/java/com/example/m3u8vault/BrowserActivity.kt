@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Dialog
 import android.app.DownloadManager
 import android.content.*
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -26,6 +27,9 @@ import androidx.activity.OnBackPressedCallback
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
@@ -87,6 +91,7 @@ class BrowserActivity : AppCompatActivity() {
     private var popupExoPlayer: ExoPlayer? = null
     private var popupExpanded = false
     private var popupSpeedIndex = 0
+    private var collapsePopupFn: (() -> Unit)? = null
     private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 2.0f)
 
     private val searchEngines = listOf(
@@ -113,6 +118,10 @@ class BrowserActivity : AppCompatActivity() {
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
+            if (popupExpanded) {
+                collapsePopupFn?.invoke()
+                return
+            }
             if (popupContainer != null) {
                 closePopupVideoPlayer()
                 return
@@ -907,7 +916,7 @@ class BrowserActivity : AppCompatActivity() {
     private fun syncNav() {
         val wv = currentTab()?.webView
         val canBack = wv?.canGoBack() == true
-        backCallback.isEnabled = popupContainer != null || canBack || tabs.size > 1
+        backCallback.isEnabled = popupExpanded || popupContainer != null || canBack || tabs.size > 1
     }
 
     private fun updateBadge() {
@@ -958,7 +967,6 @@ class BrowserActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#1E1E2E"))
         }
 
-        // Top Bar
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1335,7 +1343,7 @@ class BrowserActivity : AppCompatActivity() {
             .build()
         popupExoPlayer = player
 
-        val cardWidth = (resources.displayMetrics.widthPixels * 0.90f).toInt()
+        val cardWidth = (resources.displayMetrics.widthPixels.coerceAtMost(resources.displayMetrics.heightPixels) * 0.90f).toInt()
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             elevation = dp(12f)
@@ -1357,7 +1365,7 @@ class BrowserActivity : AppCompatActivity() {
         val topHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpInt(4f), 0, dpInt(2f), dpInt(6f))
+            setPadding(dpInt(6f), dpInt(2f), dpInt(4f), dpInt(6f))
         }
 
         val tvPopupTitle = TextView(this).apply {
@@ -1382,39 +1390,71 @@ class BrowserActivity : AppCompatActivity() {
             )
         }
 
-        val btnExpand = Button(this).apply {
+        lateinit var btnExpand: Button
+        fun setPopupFullscreenState(expand: Boolean) {
+            popupExpanded = expand
+            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+            val decorView = window.decorView as FrameLayout
+            (card.parent as? ViewGroup)?.removeView(card)
+
+            // Always reset drag offsets so card never gets stuck off-center
+            card.translationX = 0f
+            card.translationY = 0f
+
+            if (expand) {
+                btnExpand.text = "🗗"
+                card.setPadding(dpInt(12f), dpInt(8f), dpInt(12f), dpInt(8f))
+                card.background = ColorDrawable(Color.parseColor("#11111B"))
+                card.layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                playerView.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f
+                )
+                decorView.addView(card)
+
+                insetsController.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                btnExpand.text = "⛶"
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+
+                card.setPadding(dpInt(10f), dpInt(8f), dpInt(10f), dpInt(10f))
+                card.background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#313244"))
+                    cornerRadius = dp(18f)
+                    setStroke(dpInt(1.5f), Color.parseColor("#CBA6F7"))
+                }
+                card.layoutParams = FrameLayout.LayoutParams(
+                    cardWidth,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { gravity = Gravity.CENTER }
+                playerView.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dpInt(185f)
+                )
+                canvasWrapper.addView(card)
+            }
+            syncNav()
+        }
+
+        collapsePopupFn = { setPopupFullscreenState(false) }
+
+        btnExpand = Button(this).apply {
             text = "⛶"
             textSize = 14f
             setTextColor(Color.parseColor("#CDD6F4"))
             backgroundTintList = null
             background = ColorDrawable(Color.TRANSPARENT)
             setPadding(0, 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(dpInt(34f), dpInt(32f))
-            setOnClickListener {
-                popupExpanded = !popupExpanded
-                if (popupExpanded) {
-                    card.x = 0f
-                    card.y = 0f
-                    card.layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    playerView.layoutParams = LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        0,
-                        1f
-                    )
-                } else {
-                    card.layoutParams = FrameLayout.LayoutParams(
-                        cardWidth,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    ).apply { gravity = Gravity.CENTER }
-                    playerView.layoutParams = LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        dpInt(185f)
-                    )
-                }
-            }
+            layoutParams = LinearLayout.LayoutParams(dpInt(36f), dpInt(32f))
+            setOnClickListener { setPopupFullscreenState(!popupExpanded) }
         }
         topHeader.addView(btnExpand)
 
@@ -1425,7 +1465,7 @@ class BrowserActivity : AppCompatActivity() {
             backgroundTintList = null
             background = ColorDrawable(Color.TRANSPARENT)
             setPadding(0, 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(dpInt(34f), dpInt(32f))
+            layoutParams = LinearLayout.LayoutParams(dpInt(36f), dpInt(32f))
             setOnClickListener { closePopupVideoPlayer() }
         }
         topHeader.addView(btnClosePopup)
@@ -1534,22 +1574,26 @@ class BrowserActivity : AppCompatActivity() {
         bottomRow.addView(btnSaveVault)
         card.addView(bottomRow)
 
-        // Allow dragging the pop-up player anywhere on screen via its top bar
-        var dragX = 0f
-        var dragY = 0f
+        // Allow dragging the pop-up player cleanly using translationX/translationY
+        var startRawX = 0f
+        var startRawY = 0f
+        var startTransX = 0f
+        var startTransY = 0f
         topHeader.setOnTouchListener { _, event ->
             if (popupExpanded) return@setOnTouchListener false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    dragX = card.x - event.rawX
-                    dragY = card.y - event.rawY
+                    startRawX = event.rawX
+                    startRawY = event.rawY
+                    startTransX = card.translationX
+                    startTransY = card.translationY
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val maxX = (canvasWrapper.width - card.width).coerceAtLeast(0).toFloat()
-                    val maxY = (canvasWrapper.height - card.height).coerceAtLeast(0).toFloat()
-                    card.x = (event.rawX + dragX).coerceIn(0f, maxX)
-                    card.y = (event.rawY + dragY).coerceIn(0f, maxY)
+                    val maxOffsetX = ((canvasWrapper.width - card.width) / 2f).coerceAtLeast(0f)
+                    val maxOffsetY = ((canvasWrapper.height - card.height) / 2f).coerceAtLeast(0f)
+                    card.translationX = (startTransX + (event.rawX - startRawX)).coerceIn(-maxOffsetX, maxOffsetX)
+                    card.translationY = (startTransY + (event.rawY - startRawY)).coerceIn(-maxOffsetY, maxOffsetY)
                     true
                 }
                 else -> false
@@ -1566,9 +1610,16 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun closePopupVideoPlayer() {
+        if (popupExpanded) {
+            popupExpanded = false
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            WindowCompat.getInsetsController(window, window.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
+        }
+        collapsePopupFn = null
         popupExoPlayer?.release()
         popupExoPlayer = null
-        popupContainer?.let { canvasWrapper.removeView(it) }
+        popupContainer?.let { (it.parent as? ViewGroup)?.removeView(it) }
         popupContainer = null
         syncNav()
     }
