@@ -6,25 +6,24 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <!-- Top Bar with Unified Search Pill & 2-in-1 Action Icon -->
+    <!-- Minimalist Top Search Pill -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="56dp"
         android:background="#1E1E2E"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
         android:paddingHorizontal="12dp"
-        android:paddingVertical="7dp">
+        android:paddingVertical="8dp">
 
         <LinearLayout
             android:id="@+id/searchPillContainer"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="40dp"
             android:background="#313244"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingEnd="6dp">
+            android:paddingStart="14dp"
+            android:paddingEnd="4dp">
 
             <EditText
                 android:id="@+id/urlBar"
@@ -34,8 +33,8 @@
                 android:background="@android:color/transparent"
                 android:hint="Search or enter URL"
                 android:imeOptions="actionGo"
-                android:importantForAutofill="no"
                 android:inputType="textUri"
+                android:maxLines="1"
                 android:selectAllOnFocus="true"
                 android:singleLine="true"
                 android:textColor="#CDD6F4"
@@ -47,7 +46,8 @@
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:background="@android:color/transparent"
-                android:contentDescription="Reload or Clear"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
                 android:padding="0dp"
@@ -57,102 +57,95 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Catppuccin Mauve Progress Hairline -->
+    <!-- Thin Mauve Loading Progress Line -->
     <ProgressBar
         android:id="@+id/pageProgress"
-        style="@android:style/Widget.ProgressBar.Horizontal"
+        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="2dp"
         android:max="100"
-        android:progressBackgroundTint="#181825"
+        android:progressBackgroundTint="#1E1E2E"
         android:progressTint="#CBA6F7"
         android:visibility="gone" />
 
-    <!-- Full-Height WebView Canvas + Auto-Hiding Floating Catcher -->
+    <!-- Browser Canvas + Floating Pop-up & Stream Pills -->
     <FrameLayout
         android:id="@+id/canvasWrapper"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#1E1E2E">
+        android:layout_weight="1">
 
         <FrameLayout
             android:id="@+id/webContainer"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <!-- Ad-Free Pop-up Video Player Pill (UC / Coc Coc Style) -->
+        <Button
+            android:id="@+id/btnPopupPlayer"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="64dp"
+            android:background="#CBA6F7"
+            android:elevation="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="0dp"
+            android:text="▶ Pop-up"
+            android:textAllCaps="false"
+            android:textColor="#11111B"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- Draggable Mint Stream Catcher Pill -->
         <Button
             android:id="@+id/btnFloatingCatcher"
             android:layout_width="wrap_content"
-            android:layout_height="42dp"
+            android:layout_height="40dp"
             android:layout_gravity="bottom|end"
             android:layout_margin="16dp"
             android:background="#A6E3A1"
             android:elevation="6dp"
-            android:minWidth="68dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
             android:minHeight="0dp"
             android:paddingHorizontal="16dp"
-            android:text="⬇ 0"
+            android:paddingVertical="0dp"
+            android:text="⬇ 1"
             android:textAllCaps="false"
             android:textColor="#11111B"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- Subtle Hairline Divider -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#181825" />
-
-    <!-- Minimalist 5-Icon Bottom Dock -->
+    <!-- Ultra-Clean 3-Icon Bottom Dock (Tabs | Lightning Vault | Settings) -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="52dp"
         android:background="#1E1E2E"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
 
-        <Button
-            android:id="@+id/btnBack"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@android:color/transparent"
-            android:contentDescription="Back"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:text="←"
-            android:textColor="#45475A"
-            android:textSize="20sp" />
-
-        <Button
-            android:id="@+id/btnForward"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@android:color/transparent"
-            android:contentDescription="Forward"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:text="→"
-            android:textColor="#45475A"
-            android:textSize="20sp" />
-
+        <!-- Left: Tab Counter -->
         <FrameLayout
             android:id="@+id/tabSlot"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:clickable="true"
-            android:contentDescription="Open Tabs"
-            android:focusable="true">
+            android:layout_weight="1">
 
             <TextView
                 android:id="@+id/btnTabs"
-                android:layout_width="23dp"
-                android:layout_height="23dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_gravity="center"
                 android:gravity="center"
                 android:text="1"
@@ -161,31 +154,37 @@
                 android:textStyle="bold" />
         </FrameLayout>
 
+        <!-- Center: Lightning Private Vault -->
         <Button
             android:id="@+id/btnVault"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:contentDescription="Private Vault &amp; Downloads"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:minWidth="0dp"
             android:minHeight="0dp"
+            android:padding="0dp"
             android:text="⚡"
             android:textColor="#CBA6F7"
-            android:textSize="18sp" />
+            android:textSize="22sp" />
 
+        <!-- Right: Settings Gear -->
         <Button
-            android:id="@+id/btnMenu"
+            android:id="@+id/btnSettings"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:contentDescription="Menu"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:text="⋮"
+            android:padding="0dp"
+            android:text="⚙"
             android:textColor="#CDD6F4"
-            android:textSize="20sp" />
+            android:textSize="21sp" />
     </LinearLayout>
 
 </LinearLayout>
