@@ -51,6 +51,7 @@ class VaultPlayerActivity : AppCompatActivity() {
     private var completedVideos: List<Download> = emptyList()
     private var activeDownloads: List<Download> = emptyList()
     private var currentPlayingId: String? = null
+    private var pendingRestoreFullscreen = false
     private var autoAdvanceEnabled = true
     private var isFullscreen = false
     private var isUnlockedSession = false
@@ -81,6 +82,9 @@ class VaultPlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_vault_player)
 
         isUnlockedSession = savedInstanceState?.getBoolean("is_unlocked_session", false) ?: false
+        currentPlayingId = savedInstanceState?.getString("current_playing_id", null)
+        pendingRestoreFullscreen = savedInstanceState?.getBoolean("is_fullscreen", false) ?: false
+        autoAdvanceEnabled = savedInstanceState?.getBoolean("auto_advance_enabled", true) ?: true
 
         playerSection = findViewById(R.id.playerSection)
         playerFrame = findViewById(R.id.playerFrame)
@@ -102,6 +106,9 @@ class VaultPlayerActivity : AppCompatActivity() {
             findViewById(R.id.pinDot3),
             findViewById(R.id.pinDot4)
         )
+
+        btnAutoNext.text = if (autoAdvanceEnabled) "Auto: ON" else "Auto: OFF"
+        btnAutoNext.setTextColor(Color.parseColor(if (autoAdvanceEnabled) "#A6E3A1" else "#6C7086"))
 
         btnExitFullscreenOverlay = Button(this).apply {
             text = "✕"
@@ -134,7 +141,13 @@ class VaultPlayerActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        currentPlayingId?.let { id ->
+            exoPlayer?.let { saveSafePosition(id, it) }
+        }
         outState.putBoolean("is_unlocked_session", isUnlockedSession)
+        outState.putString("current_playing_id", currentPlayingId)
+        outState.putBoolean("is_fullscreen", isFullscreen)
+        outState.putBoolean("auto_advance_enabled", autoAdvanceEnabled)
     }
 
     private fun dp(v: Float): Float = v * resources.displayMetrics.density
@@ -285,7 +298,7 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleFullscreen(enable: Boolean) {
+    private fun toggleFullscreen(enable: Boolean, changeOrientation: Boolean = true) {
         isFullscreen = enable
         backCallback.isEnabled = enable
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
@@ -309,9 +322,13 @@ class VaultPlayerActivity : AppCompatActivity() {
             insetsController.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             insetsController.hide(WindowInsetsCompat.Type.systemBars())
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            if (changeOrientation) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
         } else {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (changeOrientation) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
             insetsController.show(WindowInsetsCompat.Type.systemBars())
 
             btnExitFullscreenOverlay.visibility = View.GONE
@@ -331,10 +348,12 @@ class VaultPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun playVideo(download: Download) {
+    private fun playVideo(download: Download, savePrevious: Boolean = true) {
         val player = exoPlayer ?: return
-        currentPlayingId?.let { prevId ->
-            saveSafePosition(prevId, player)
+        if (savePrevious) {
+            currentPlayingId?.let { prevId ->
+                saveSafePosition(prevId, player)
+            }
         }
 
         val id = download.request.id
@@ -354,7 +373,7 @@ class VaultPlayerActivity : AppCompatActivity() {
         val savedPos = VaultEngine.getPlaybackPosition(this, id)
         if (savedPos > 1000L) player.seekTo(savedPos)
         player.playWhenReady = true
-        renderUnifiedList()
+        if (!isFullscreen) renderUnifiedList()
     }
 
     private fun playAdjacentVideo(offset: Int) {
@@ -457,11 +476,25 @@ class VaultPlayerActivity : AppCompatActivity() {
         val all = VaultEngine.getAllDownloads(this)
         activeDownloads = all.filter { it.state != Download.STATE_COMPLETED }
         completedVideos = all.filter { it.state == Download.STATE_COMPLETED }
+
+        // Automatically resume the playing video & fullscreen state if activity recreated on rotation
+        val restoreId = currentPlayingId
+        if (restoreId != null && (exoPlayer?.mediaItemCount ?: 0) == 0) {
+            val target = all.firstOrNull { it.request.id == restoreId }
+            if (target != null) {
+                playVideo(target, savePrevious = false)
+                if (pendingRestoreFullscreen) {
+                    pendingRestoreFullscreen = false
+                    toggleFullscreen(true, changeOrientation = false)
+                }
+                return
+            }
+        }
+
         if (!isFullscreen) renderUnifiedList()
     }
 
     private fun renderUnifiedList() {
-        // Single unified list: active downloads at top (only when running), followed by saved videos
         val unifiedItems = activeDownloads + completedVideos
         tvEmptyVault.visibility = if (unifiedItems.isEmpty()) View.VISIBLE else View.GONE
 
@@ -652,7 +685,6 @@ class VaultPlayerActivity : AppCompatActivity() {
         btnPinUnlock.setOnClickListener { verifyOrSavePin() }
         updateLockIcon()
 
-        // Optional PIN: only lock if the user explicitly turned PIN lock ON
         if (isPinEnabled() && !isUnlockedSession) {
             showPinOverlay(forceReset = false)
         } else {
