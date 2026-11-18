@@ -23,8 +23,17 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.*
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
+import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.PlayerView
+import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -35,6 +44,7 @@ import java.util.Collections
 import java.util.concurrent.Executors
 import kotlin.math.abs
 
+@OptIn(UnstableApi::class)
 class BrowserActivity : AppCompatActivity() {
 
     private data class BrowserTab(
@@ -55,10 +65,9 @@ class BrowserActivity : AppCompatActivity() {
     private lateinit var webContainer: FrameLayout
     private lateinit var urlBar: EditText
     private lateinit var pageProgress: ProgressBar
-    private lateinit var btnBack: Button
-    private lateinit var btnForward: Button
     private lateinit var btnReload: Button
     private lateinit var btnTabs: TextView
+    private lateinit var btnPopupPlayer: Button
     private lateinit var btnFloatingCatcher: Button
 
     private val tabs = mutableListOf<BrowserTab>()
@@ -72,6 +81,13 @@ class BrowserActivity : AppCompatActivity() {
     private var isInspecting = false
     private val inspectExecutor = Executors.newSingleThreadExecutor()
     private val translateExecutor = Executors.newFixedThreadPool(3)
+
+    // Floating Ad-Free Pop-up Player state
+    private var popupContainer: LinearLayout? = null
+    private var popupExoPlayer: ExoPlayer? = null
+    private var popupExpanded = false
+    private var popupSpeedIndex = 0
+    private val playbackSpeeds = listOf(1.0f, 1.25f, 1.5f, 2.0f)
 
     private val searchEngines = listOf(
         "DuckDuckGo Lite (No CAPTCHA)" to "https://lite.duckduckgo.com/lite/",
@@ -97,9 +113,14 @@ class BrowserActivity : AppCompatActivity() {
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
+            if (popupContainer != null) {
+                closePopupVideoPlayer()
+                return
+            }
             val current = currentTab() ?: return
             if (current.webView.canGoBack()) current.webView.goBack()
             else if (tabs.size > 1) closeTab(activeTabIndex)
+            syncNav()
         }
     }
 
@@ -112,6 +133,7 @@ class BrowserActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
         autoTranslateEnabled = prefs.getBoolean("auto_translate_enabled", false)
         translateTargetLang = prefs.getString("translate_target_lang", "en") ?: "en"
+        adShieldEnabled = prefs.getBoolean("ad_shield_enabled", true)
         searxngBaseUrl = prefs.getString("default_search_url", "https://lite.duckduckgo.com/lite/")
             ?: "https://lite.duckduckgo.com/lite/"
 
@@ -119,16 +141,15 @@ class BrowserActivity : AppCompatActivity() {
         webContainer = findViewById(R.id.webContainer)
         urlBar = findViewById(R.id.urlBar)
         pageProgress = findViewById(R.id.pageProgress)
-        btnBack = findViewById(R.id.btnBack)
-        btnForward = findViewById(R.id.btnForward)
         btnReload = findViewById(R.id.btnReload)
         btnTabs = findViewById(R.id.btnTabs)
+        btnPopupPlayer = findViewById(R.id.btnPopupPlayer)
         btnFloatingCatcher = findViewById(R.id.btnFloatingCatcher)
 
         applyCatppuccinMochaShapes()
         onBackPressedDispatcher.addCallback(this, backCallback)
         setupListeners()
-        setupFloatingCatcher()
+        setupFloatingPills()
         openNewTab(searxngBaseUrl)
     }
 
@@ -141,9 +162,16 @@ class BrowserActivity : AppCompatActivity() {
             cornerRadius = dp(20f)
         }
 
+        btnPopupPlayer.backgroundTintList = null
+        btnPopupPlayer.background = GradientDrawable().apply {
+            setColor(Color.parseColor("#CBA6F7"))
+            cornerRadius = dp(19f)
+        }
+
+        btnFloatingCatcher.backgroundTintList = null
         btnFloatingCatcher.background = GradientDrawable().apply {
             setColor(Color.parseColor("#A6E3A1"))
-            cornerRadius = dp(21f)
+            cornerRadius = dp(20f)
         }
 
         btnTabs.background = GradientDrawable().apply {
@@ -151,6 +179,10 @@ class BrowserActivity : AppCompatActivity() {
             cornerRadius = dp(5f)
             setStroke(dpInt(1.5f), Color.parseColor("#CDD6F4"))
         }
+
+        btnReload.backgroundTintList = null
+        findViewById<Button>(R.id.btnVault).backgroundTintList = null
+        findViewById<Button>(R.id.btnSettings).backgroundTintList = null
     }
 
     private fun syncSmartTopButton() {
@@ -194,9 +226,6 @@ class BrowserActivity : AppCompatActivity() {
             } else false
         }
 
-        btnBack.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoBack() }?.goBack() }
-        btnForward.setOnClickListener { currentTab()?.webView?.takeIf { it.canGoForward() }?.goForward() }
-
         val tabSlot = findViewById<View>(R.id.tabSlot)
         tabSlot.setOnClickListener { showTabSwitcher() }
         tabSlot.setOnLongClickListener {
@@ -205,14 +234,17 @@ class BrowserActivity : AppCompatActivity() {
             true
         }
 
-        findViewById<Button>(R.id.btnMenu).setOnClickListener { showNavigationDrawerMenu() }
         findViewById<Button>(R.id.btnVault).setOnClickListener {
             startActivity(Intent(this, VaultPlayerActivity::class.java))
+        }
+
+        findViewById<Button>(R.id.btnSettings).setOnClickListener {
+            showCatppuccinSettingsScreen()
         }
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun setupFloatingCatcher() {
+    private fun setupFloatingPills() {
         var dX = 0f
         var dY = 0f
         var downX = 0f
@@ -240,11 +272,15 @@ class BrowserActivity : AppCompatActivity() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!moved) openSmartDownloadPicker()
+                    if (!moved) openStreamAction(openAsPopup = false)
                     true
                 }
                 else -> false
             }
+        }
+
+        btnPopupPlayer.setOnClickListener {
+            openStreamAction(openAsPopup = true)
         }
     }
 
@@ -261,6 +297,12 @@ class BrowserActivity : AppCompatActivity() {
         tab.lastUrl = clean
         synchronized(tab.streams) { tab.streams.clear() }
         if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
+    }
+
+    private fun isDirectPlayableVideoUrl(url: String, accept: String = ""): Boolean {
+        if (BrowserHelper.isHlsStream(url, accept)) return true
+        val lower = url.lowercase().substringBefore("?").substringBefore("#")
+        return lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".m4v")
     }
 
     private fun isNonVideoDocument(fileName: String, mimetype: String?): Boolean {
@@ -291,6 +333,29 @@ class BrowserActivity : AppCompatActivity() {
             searxngBaseUrl.contains("brave.com") -> "https://search.brave.com/search?q=$q"
             else -> BrowserHelper.resolveInput(trimmed, searxngBaseUrl)
         }
+    }
+
+    private fun injectVideoTagObserver(webView: WebView?) {
+        webView?.evaluateJavascript(
+            """
+            (function() {
+                if (window.__vaultVideoObserverAttached) return;
+                window.__vaultVideoObserverAttached = true;
+                function reportVideos() {
+                    document.querySelectorAll('video, source').forEach(el => {
+                        const src = el.currentSrc || el.src || el.getAttribute('src');
+                        if (src && src.startsWith('http') && !src.startsWith('blob:')) {
+                            VaultSniffer.onVideoUrlDetected(src);
+                        }
+                    });
+                }
+                reportVideos();
+                document.addEventListener('play', reportVideos, true);
+                setInterval(reportVideos, 2500);
+            })();
+            """.trimIndent(),
+            null
+        )
     }
 
     private fun triggerAutoTranslation(webView: WebView?, resetExisting: Boolean = false) {
@@ -594,12 +659,24 @@ class BrowserActivity : AppCompatActivity() {
         wv.addJavascriptInterface(object {
             @JavascriptInterface
             fun onM3u8Detected(url: String) {
-                if (BrowserHelper.isHlsStream(url)) {
+                if (isDirectPlayableVideoUrl(url)) {
                     synchronized(tab.streams) {
                         tab.streams.remove(url)
                         tab.streams.add(url)
                     }
                     if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
+                }
+            }
+
+            @JavascriptInterface
+            fun onVideoUrlDetected(url: String) {
+                if (isDirectPlayableVideoUrl(url)) {
+                    synchronized(tab.streams) {
+                        if (!tab.streams.contains(url)) {
+                            tab.streams.add(url)
+                            if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
+                        }
+                    }
                 }
             }
 
@@ -660,7 +737,7 @@ class BrowserActivity : AppCompatActivity() {
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString().orEmpty()
                 val accept = request?.requestHeaders?.get("Accept").orEmpty()
-                if (BrowserHelper.isHlsStream(url, accept)) {
+                if (isDirectPlayableVideoUrl(url, accept)) {
                     synchronized(tab.streams) {
                         tab.streams.remove(url)
                         tab.streams.add(url)
@@ -691,6 +768,7 @@ class BrowserActivity : AppCompatActivity() {
                     syncNav()
                 }
                 view?.evaluateJavascript(BrowserHelper.HOOK_JS, null)
+                injectVideoTagObserver(view)
                 if (autoTranslateEnabled) {
                     triggerAutoTranslation(view, resetExisting = false)
                 }
@@ -829,15 +907,7 @@ class BrowserActivity : AppCompatActivity() {
     private fun syncNav() {
         val wv = currentTab()?.webView
         val canBack = wv?.canGoBack() == true
-        val canForward = wv?.canGoForward() == true
-
-        btnBack.isEnabled = canBack
-        btnBack.setTextColor(Color.parseColor(if (canBack) "#CDD6F4" else "#45475A"))
-
-        btnForward.isEnabled = canForward
-        btnForward.setTextColor(Color.parseColor(if (canForward) "#CDD6F4" else "#45475A"))
-
-        backCallback.isEnabled = canBack || tabs.size > 1
+        backCallback.isEnabled = popupContainer != null || canBack || tabs.size > 1
     }
 
     private fun updateBadge() {
@@ -845,8 +915,10 @@ class BrowserActivity : AppCompatActivity() {
         if (count > 0 || isInspecting) {
             btnFloatingCatcher.visibility = View.VISIBLE
             btnFloatingCatcher.text = if (isInspecting) "⏳" else "⬇ $count"
+            btnPopupPlayer.visibility = if (count > 0 && !isInspecting) View.VISIBLE else View.GONE
         } else {
             btnFloatingCatcher.visibility = View.GONE
+            btnPopupPlayer.visibility = View.GONE
         }
     }
 
@@ -858,6 +930,652 @@ class BrowserActivity : AppCompatActivity() {
         updateBadge()
         tab.webView.loadUrl(resolveSearchOrUrl(input))
     }
+
+    // =========================================================================
+    // CATPPUCCIN MOCHA FULL-SCREEN SETTINGS (GROUPED SLATE CARDS)
+    // =========================================================================
+
+    private fun createMintSwitch(checked: Boolean, onToggle: (Boolean) -> Unit): Switch {
+        return Switch(this).apply {
+            isChecked = checked
+            thumbDrawable?.setTint(if (checked) Color.parseColor("#11111B") else Color.parseColor("#CDD6F4"))
+            trackDrawable?.setTint(if (checked) Color.parseColor("#A6E3A1") else Color.parseColor("#45475A"))
+            setOnCheckedChangeListener { _, isChecked ->
+                thumbDrawable?.setTint(if (isChecked) Color.parseColor("#11111B") else Color.parseColor("#CDD6F4"))
+                trackDrawable?.setTint(if (isChecked) Color.parseColor("#A6E3A1") else Color.parseColor("#45475A"))
+                onToggle(isChecked)
+            }
+        }
+    }
+
+    private fun showCatppuccinSettingsScreen() {
+        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val prefs = getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
+        val wv = currentTab()?.webView
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#1E1E2E"))
+        }
+
+        // Top Bar
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpInt(8f), dpInt(8f), dpInt(16f), dpInt(8f))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dpInt(54f)
+            )
+        }
+        val btnClose = Button(this).apply {
+            text = "←"
+            textSize = 20f
+            setTextColor(Color.parseColor("#CDD6F4"))
+            backgroundTintList = null
+            background = ColorDrawable(Color.TRANSPARENT)
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(dpInt(42f), dpInt(42f))
+            setOnClickListener { dialog.dismiss() }
+        }
+        val tvHeader = TextView(this).apply {
+            text = "Settings"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#CDD6F4"))
+            setPadding(dpInt(6f), 0, 0, 0)
+        }
+        topBar.addView(btnClose)
+        topBar.addView(tvHeader)
+        root.addView(topBar)
+
+        val scroll = ScrollView(this)
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpInt(16f), dpInt(6f), dpInt(16f), dpInt(28f))
+        }
+
+        fun addSectionTitle(title: String) {
+            val tv = TextView(this).apply {
+                text = title
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#CBA6F7"))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpInt(14f)
+                    bottomMargin = dpInt(8f)
+                    marginStart = dpInt(4f)
+                }
+            }
+            body.addView(tv)
+        }
+
+        fun createCard(): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#313244"))
+                cornerRadius = dp(16f)
+            }
+        }
+
+        fun addDivider(card: LinearLayout) {
+            card.addView(View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1).apply {
+                    marginStart = dpInt(16f)
+                    marginEnd = dpInt(16f)
+                }
+                setBackgroundColor(Color.parseColor("#45475A"))
+            })
+        }
+
+        fun createRow(label: String, rightView: View? = null, valueText: String? = null, onClick: (() -> Unit)? = null): LinearLayout {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dpInt(16f), dpInt(14f), dpInt(16f), dpInt(14f))
+            }
+            val tvLabel = TextView(this).apply {
+                text = label
+                textSize = 15f
+                setTextColor(Color.parseColor("#CDD6F4"))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            row.addView(tvLabel)
+
+            if (valueText != null) {
+                val tvVal = TextView(this).apply {
+                    text = valueText
+                    textSize = 13f
+                    setTextColor(Color.parseColor("#A6ADC8"))
+                }
+                row.addView(tvVal)
+            }
+            if (rightView != null) {
+                row.addView(rightView)
+            }
+            if (onClick != null) {
+                row.setOnClickListener { onClick() }
+            }
+            return row
+        }
+
+        // --- SECTION 1: PRIVACY & VAULT ---
+        addSectionTitle("Privacy & Vault")
+        val vaultCard = createCard()
+        val pinEnabled = prefs.getBoolean("vault_pin_enabled", false)
+        val savedPin = prefs.getString("vault_pin", "").orEmpty()
+
+        val swVaultPin = createMintSwitch(pinEnabled) { enabled ->
+            if (enabled) {
+                if (savedPin.length < 4) {
+                    promptSetOptionalPin(prefs) { ok ->
+                        if (!ok) {
+                            prefs.edit().putBoolean("vault_pin_enabled", false).apply()
+                            dialog.dismiss()
+                            showCatppuccinSettingsScreen()
+                        }
+                    }
+                } else {
+                    prefs.edit().putBoolean("vault_pin_enabled", true).apply()
+                    Toast.makeText(this, "Vault PIN Lock Enabled", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                prefs.edit().putBoolean("vault_pin_enabled", false).apply()
+                Toast.makeText(this, "Vault PIN Lock Disabled", Toast.LENGTH_SHORT).show()
+            }
+        }
+        vaultCard.addView(createRow("Vault PIN Lock (Optional)", rightView = swVaultPin))
+        addDivider(vaultCard)
+        vaultCard.addView(createRow("Set / Change 4-Digit PIN", valueText = "›") {
+            promptSetOptionalPin(prefs) {}
+        })
+        body.addView(vaultCard)
+
+        // --- SECTION 2: BROWSER ---
+        addSectionTitle("Browser")
+        val browserCard = createCard()
+
+        val swAdShield = createMintSwitch(adShieldEnabled) { enabled ->
+            adShieldEnabled = enabled
+            prefs.edit().putBoolean("ad_shield_enabled", enabled).apply()
+        }
+        browserCard.addView(createRow("Ad & Popup Shield", rightView = swAdShield))
+        addDivider(browserCard)
+
+        val currentEngineName = searchEngines.firstOrNull { it.second == searxngBaseUrl }?.first
+            ?.substringBefore(" (") ?: searxngBaseUrl.removePrefix("https://").substringBefore("/")
+        browserCard.addView(createRow("Search Engine", valueText = "$currentEngineName  ›") {
+            val combined = searchEngines + BrowserHelper.SEARXNG_INSTANCES
+                .filterNot { url -> searchEngines.any { it.second == url } }
+                .map { it to it }
+            val labels = combined.map { it.first }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle("Select Search Engine")
+                .setItems(labels) { _, i ->
+                    searxngBaseUrl = combined[i].second
+                    prefs.edit().putString("default_search_url", searxngBaseUrl).apply()
+                    loadInCurrentTab(searxngBaseUrl)
+                    dialog.dismiss()
+                }.show()
+        })
+        addDivider(browserCard)
+
+        val swDesktop = createMintSwitch(desktopMode) { enabled ->
+            desktopMode = enabled
+            wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
+            wv?.reload()
+        }
+        browserCard.addView(createRow("Desktop Site", rightView = swDesktop))
+        addDivider(browserCard)
+
+        browserCard.addView(createRow("Bookmark Current Page", valueText = "⭐") {
+            dialog.dismiss()
+            bookmarkCurrentPage()
+        })
+        addDivider(browserCard)
+
+        browserCard.addView(createRow("Saved Bookmarks", valueText = "›") {
+            dialog.dismiss()
+            showBookmarksDialog()
+        })
+        addDivider(browserCard)
+
+        browserCard.addView(createRow("Paste .m3u8 / Video URL", valueText = "›") {
+            dialog.dismiss()
+            showManualPasteDialog()
+        })
+        body.addView(browserCard)
+
+        // --- SECTION 3: TRANSLATOR ---
+        addSectionTitle("Translator")
+        val transCard = createCard()
+        val langName = supportedLanguages.firstOrNull { it.second == translateTargetLang }?.first
+            ?.substringBefore(" (") ?: translateTargetLang
+
+        val swAutoTrans = createMintSwitch(autoTranslateEnabled) { enabled ->
+            autoTranslateEnabled = enabled
+            prefs.edit().putBoolean("auto_translate_enabled", enabled).apply()
+            if (enabled) {
+                triggerAutoTranslation(wv, resetExisting = false)
+            } else {
+                restoreOriginalPageText(wv)
+            }
+        }
+        transCard.addView(createRow("Auto Page Translator", rightView = swAutoTrans))
+        addDivider(transCard)
+
+        transCard.addView(createRow("Target Language", valueText = "$langName  ›") {
+            val langLabels = supportedLanguages.map { it.first }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle("Translate Pages Into")
+                .setItems(langLabels) { _, idx ->
+                    translateTargetLang = supportedLanguages[idx].second
+                    autoTranslateEnabled = true
+                    prefs.edit()
+                        .putString("translate_target_lang", translateTargetLang)
+                        .putBoolean("auto_translate_enabled", true)
+                        .apply()
+                    triggerAutoTranslation(wv, resetExisting = true)
+                    dialog.dismiss()
+                    Toast.makeText(this, "Translating to ${supportedLanguages[idx].first}", Toast.LENGTH_SHORT).show()
+                }.show()
+        })
+        addDivider(transCard)
+
+        transCard.addView(createRow("Translate Current Page Now", valueText = "🔄") {
+            autoTranslateEnabled = true
+            prefs.edit().putBoolean("auto_translate_enabled", true).apply()
+            triggerAutoTranslation(wv, resetExisting = true)
+            dialog.dismiss()
+            Toast.makeText(this, "Translating page...", Toast.LENGTH_SHORT).show()
+        })
+        body.addView(transCard)
+
+        scroll.addView(body)
+        root.addView(scroll)
+        dialog.setContentView(root)
+        dialog.show()
+    }
+
+    private fun promptSetOptionalPin(prefs: SharedPreferences, onDone: (Boolean) -> Unit) {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(36, 20, 36, 8)
+        }
+        val etPin = EditText(this).apply {
+            hint = "Enter 4-digit PIN (e.g. 0000)"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            filters = arrayOf(android.text.InputFilter.LengthFilter(4))
+        }
+        box.addView(etPin)
+
+        AlertDialog.Builder(this)
+            .setTitle("Set Optional Vault PIN")
+            .setView(box)
+            .setPositiveButton("Save PIN") { _, _ ->
+                val pin = etPin.text.toString().trim()
+                if (pin.length == 4) {
+                    prefs.edit()
+                        .putString("vault_pin", pin)
+                        .putBoolean("vault_pin_enabled", true)
+                        .apply()
+                    Toast.makeText(this, "Vault PIN Saved & Enabled", Toast.LENGTH_SHORT).show()
+                    onDone(true)
+                } else {
+                    Toast.makeText(this, "Please enter exactly 4 digits", Toast.LENGTH_SHORT).show()
+                    onDone(false)
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ -> onDone(false) }
+            .show()
+    }
+
+    // =========================================================================
+    // UC / COC COC STYLE AD-FREE POP-UP VIDEO PLAYER
+    // =========================================================================
+
+    private fun openStreamAction(openAsPopup: Boolean) {
+        if (isInspecting) return
+        val tab = currentTab() ?: return
+        val rawUrls = synchronized(tab.streams) { tab.streams.toList().reversed() }
+        if (rawUrls.isEmpty()) {
+            Toast.makeText(this, "No video streams detected yet. Play the video first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val pageUrl = tab.webView.url.orEmpty()
+        val ua = runCatching { tab.webView.settings.userAgentString }.getOrDefault(BrowserHelper.MOBILE_UA)
+        val cookies = safeCookies(pageUrl)
+        val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "Vault_Video" } ?: "Vault_Video"
+
+        isInspecting = true
+        updateBadge()
+
+        inspectExecutor.execute {
+            val options = mutableListOf<StreamOption>()
+            val seen = HashSet<String>()
+
+            for (rawUrl in rawUrls.take(8)) {
+                val parsed = inspectM3u8(rawUrl, pageUrl, ua, cookies)
+                for (opt in parsed) {
+                    if (seen.add(opt.url)) options.add(opt)
+                }
+            }
+
+            if (options.isEmpty()) {
+                rawUrls.forEachIndexed { idx, u ->
+                    val q = detectQualityFromUrl(u)
+                    val label = if (q != null) "$q • ${u.takeLast(28)}" else "Stream #${idx + 1} • ${u.takeLast(32)}"
+                    val h = q?.removeSuffix("p")?.toIntOrNull() ?: 0
+                    options.add(StreamOption(label, u, q.orEmpty(), h))
+                }
+            }
+
+            val sortedOptions = options.sortedByDescending { it.sortHeight }
+
+            runOnUiThread {
+                isInspecting = false
+                updateBadge()
+                if (openAsPopup) {
+                    showAdFreePopupVideoPlayer(sortedOptions, 0, defaultTitle, pageUrl, ua, cookies)
+                } else {
+                    showCatppuccinStreamBottomSheet(sortedOptions, defaultTitle, pageUrl, ua, cookies)
+                }
+            }
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun showAdFreePopupVideoPlayer(
+        options: List<StreamOption>,
+        initialIndex: Int,
+        videoTitle: String,
+        pageUrl: String,
+        ua: String,
+        cookies: String
+    ) {
+        closePopupVideoPlayer()
+        if (options.isEmpty()) return
+
+        // Pause noisy webpage media in background so only the clean pop-up plays
+        currentTab()?.webView?.evaluateJavascript(
+            "document.querySelectorAll('video,audio').forEach(m => m.pause());",
+            null
+        )
+
+        var currentIndex = initialIndex.coerceIn(0, options.lastIndex)
+        popupSpeedIndex = 0
+        popupExpanded = false
+
+        val headersMap = mutableMapOf<String, String>()
+        if (ua.isNotBlank()) headersMap["User-Agent"] = ua
+        if (pageUrl.isNotBlank()) {
+            headersMap["Referer"] = pageUrl
+            runCatching {
+                val u = URI(pageUrl)
+                if (u.scheme != null && u.host != null) {
+                    headersMap["Origin"] = "${u.scheme}://${u.host}"
+                }
+            }
+        }
+        if (cookies.isNotBlank()) headersMap["Cookie"] = cookies
+
+        val okHttpClient = OkHttpClient.Builder()
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+            .setDefaultRequestProperties(headersMap)
+
+        val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .build()
+        popupExoPlayer = player
+
+        val cardWidth = (resources.displayMetrics.widthPixels * 0.90f).toInt()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            elevation = dp(12f)
+            setPadding(dpInt(10f), dpInt(8f), dpInt(10f), dpInt(10f))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#313244"))
+                cornerRadius = dp(18f)
+                setStroke(dpInt(1.5f), Color.parseColor("#CBA6F7"))
+            }
+            layoutParams = FrameLayout.LayoutParams(
+                cardWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER
+            }
+        }
+
+        // Top Drag Handle + Controls
+        val topHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpInt(4f), 0, dpInt(2f), dpInt(6f))
+        }
+
+        val tvPopupTitle = TextView(this).apply {
+            text = "⚡ $videoTitle"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#CDD6F4"))
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        topHeader.addView(tvPopupTitle)
+
+        val playerView = PlayerView(this).apply {
+            this.player = player
+            useController = true
+            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+            setBackgroundColor(Color.parseColor("#11111B"))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dpInt(185f)
+            )
+        }
+
+        val btnExpand = Button(this).apply {
+            text = "⛶"
+            textSize = 14f
+            setTextColor(Color.parseColor("#CDD6F4"))
+            backgroundTintList = null
+            background = ColorDrawable(Color.TRANSPARENT)
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(dpInt(34f), dpInt(32f))
+            setOnClickListener {
+                popupExpanded = !popupExpanded
+                if (popupExpanded) {
+                    card.x = 0f
+                    card.y = 0f
+                    card.layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    playerView.layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f
+                    )
+                } else {
+                    card.layoutParams = FrameLayout.LayoutParams(
+                        cardWidth,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { gravity = Gravity.CENTER }
+                    playerView.layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        dpInt(185f)
+                    )
+                }
+            }
+        }
+        topHeader.addView(btnExpand)
+
+        val btnClosePopup = Button(this).apply {
+            text = "✕"
+            textSize = 14f
+            setTextColor(Color.parseColor("#F38BA8"))
+            backgroundTintList = null
+            background = ColorDrawable(Color.TRANSPARENT)
+            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(dpInt(34f), dpInt(32f))
+            setOnClickListener { closePopupVideoPlayer() }
+        }
+        topHeader.addView(btnClosePopup)
+        card.addView(topHeader)
+        card.addView(playerView)
+
+        // Bottom Controls Row: Speed | Quality | Save to Vault
+        val bottomRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dpInt(8f), 0, 0)
+        }
+
+        val btnSpeed = Button(this).apply {
+            text = "1.0x"
+            textSize = 12f
+            isAllCaps = false
+            setTextColor(Color.parseColor("#CDD6F4"))
+            backgroundTintList = null
+            setPadding(dpInt(12f), 0, dpInt(12f), 0)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E1E2E"))
+                cornerRadius = dp(14f)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dpInt(34f)
+            ).apply { marginEnd = dpInt(8f) }
+            setOnClickListener {
+                popupSpeedIndex = (popupSpeedIndex + 1) % playbackSpeeds.size
+                val spd = playbackSpeeds[popupSpeedIndex]
+                player.playbackParameters = PlaybackParameters(spd)
+                text = "${spd}x"
+            }
+        }
+        bottomRow.addView(btnSpeed)
+
+        val btnQuality = Button(this).apply {
+            text = options[currentIndex].qualityBadge.ifBlank { "Auto" }
+            textSize = 12f
+            isAllCaps = false
+            setTextColor(Color.parseColor("#CBA6F7"))
+            backgroundTintList = null
+            setPadding(dpInt(12f), 0, dpInt(12f), 0)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1E1E2E"))
+                cornerRadius = dp(14f)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dpInt(34f)
+            ).apply { marginEnd = dpInt(8f) }
+            visibility = if (options.size > 1) View.VISIBLE else View.GONE
+            setOnClickListener {
+                val labels = options.map { it.label }.toTypedArray()
+                AlertDialog.Builder(this@BrowserActivity)
+                    .setTitle("Switch Pop-up Quality")
+                    .setItems(labels) { _, idx ->
+                        currentIndex = idx
+                        val pos = player.currentPosition
+                        text = options[idx].qualityBadge.ifBlank { "Auto" }
+                        player.setMediaItem(MediaItem.fromUri(options[idx].url))
+                        player.prepare()
+                        if (pos > 0L) player.seekTo(pos)
+                        player.playWhenReady = true
+                    }.show()
+            }
+        }
+        bottomRow.addView(btnQuality)
+
+        bottomRow.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+        })
+
+        val btnSaveVault = Button(this).apply {
+            text = "⬇ Save to Vault"
+            textSize = 12f
+            isAllCaps = false
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#11111B"))
+            backgroundTintList = null
+            setPadding(dpInt(14f), 0, dpInt(14f), 0)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#A6E3A1"))
+                cornerRadius = dp(16f)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dpInt(34f)
+            )
+            setOnClickListener {
+                val picked = options[currentIndex]
+                runCatching {
+                    VaultEngine.enqueueM3u8Download(
+                        this@BrowserActivity,
+                        videoTitle,
+                        picked.url,
+                        StreamHeaders(pageUrl, ua, cookies)
+                    )
+                    Toast.makeText(this@BrowserActivity, "Downloading to Vault: $videoTitle", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(this@BrowserActivity, "Error: ${it.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        bottomRow.addView(btnSaveVault)
+        card.addView(bottomRow)
+
+        // Allow dragging the pop-up player anywhere on screen via its top bar
+        var dragX = 0f
+        var dragY = 0f
+        topHeader.setOnTouchListener { _, event ->
+            if (popupExpanded) return@setOnTouchListener false
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    dragX = card.x - event.rawX
+                    dragY = card.y - event.rawY
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val maxX = (canvasWrapper.width - card.width).coerceAtLeast(0).toFloat()
+                    val maxY = (canvasWrapper.height - card.height).coerceAtLeast(0).toFloat()
+                    card.x = (event.rawX + dragX).coerceIn(0f, maxX)
+                    card.y = (event.rawY + dragY).coerceIn(0f, maxY)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        popupContainer = card
+        canvasWrapper.addView(card)
+        syncNav()
+
+        player.setMediaItem(MediaItem.fromUri(options[currentIndex].url))
+        player.prepare()
+        player.playWhenReady = true
+    }
+
+    private fun closePopupVideoPlayer() {
+        popupExoPlayer?.release()
+        popupExoPlayer = null
+        popupContainer?.let { canvasWrapper.removeView(it) }
+        popupContainer = null
+        syncNav()
+    }
+
+    // =========================================================================
+    // BOOKMARKS, TABS & STREAM BOTTOM SHEET
+    // =========================================================================
 
     private fun getSavedBookmarks(): MutableList<Pair<String, String>> {
         val prefs = getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
@@ -1005,99 +1723,6 @@ class BrowserActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showNavigationDrawerMenu() {
-        val wv = currentTab()?.webView
-        val langName = supportedLanguages.firstOrNull { it.second == translateTargetLang }?.first ?: translateTargetLang
-        val items = arrayOf(
-            "⌂ Search Home",
-            "+ New Window / Tab",
-            "⭐ Bookmark This Page",
-            "🔖 Saved Bookmarks",
-            if (autoTranslateEnabled) "🌐 Auto Page Translator: ON ($langName)" else "🌐 Auto Page Translator: OFF",
-            "🔄 Translate Current Page Now ($langName)",
-            "🗣 Translator Language ($langName)",
-            if (adShieldEnabled) "🛡 Ad & Redirect Shield: ON" else "🛡 Ad & Redirect Shield: OFF",
-            if (desktopMode) "🖥 Desktop Site: ON" else "🖥 Desktop Site: OFF",
-            "🔍 Change Search Engine",
-            "🔗 Paste .m3u8 / Video URL Manually",
-            "🧹 Clear Detected Streams"
-        )
-
-        AlertDialog.Builder(this)
-            .setTitle("Navigation & Tools")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> loadInCurrentTab(searxngBaseUrl)
-                    1 -> openNewTab(searxngBaseUrl)
-                    2 -> bookmarkCurrentPage()
-                    3 -> showBookmarksDialog()
-                    4 -> {
-                        autoTranslateEnabled = !autoTranslateEnabled
-                        getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
-                            .edit().putBoolean("auto_translate_enabled", autoTranslateEnabled).apply()
-                        if (autoTranslateEnabled) {
-                            triggerAutoTranslation(wv, resetExisting = false)
-                            Toast.makeText(this, "Auto-Translating to $langName", Toast.LENGTH_SHORT).show()
-                        } else {
-                            restoreOriginalPageText(wv)
-                            Toast.makeText(this, "Auto Page Translator OFF", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    5 -> {
-                        autoTranslateEnabled = true
-                        getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
-                            .edit().putBoolean("auto_translate_enabled", true).apply()
-                        triggerAutoTranslation(wv, resetExisting = true)
-                        Toast.makeText(this, "Translating page to $langName...", Toast.LENGTH_SHORT).show()
-                    }
-                    6 -> {
-                        val langLabels = supportedLanguages.map { it.first }.toTypedArray()
-                        AlertDialog.Builder(this)
-                            .setTitle("Translate Pages Into")
-                            .setItems(langLabels) { _, idx ->
-                                translateTargetLang = supportedLanguages[idx].second
-                                autoTranslateEnabled = true
-                                getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE).edit()
-                                    .putString("translate_target_lang", translateTargetLang)
-                                    .putBoolean("auto_translate_enabled", true)
-                                    .apply()
-                                triggerAutoTranslation(wv, resetExisting = true)
-                                Toast.makeText(this, "Auto-Translating to ${supportedLanguages[idx].first}", Toast.LENGTH_SHORT).show()
-                            }.show()
-                    }
-                    7 -> {
-                        adShieldEnabled = !adShieldEnabled
-                        Toast.makeText(this, if (adShieldEnabled) "Shield ON" else "Shield OFF", Toast.LENGTH_SHORT).show()
-                    }
-                    8 -> {
-                        desktopMode = !desktopMode
-                        wv?.settings?.userAgentString = if (desktopMode) BrowserHelper.DESKTOP_UA else BrowserHelper.MOBILE_UA
-                        wv?.reload()
-                    }
-                    9 -> {
-                        val combined = searchEngines + BrowserHelper.SEARXNG_INSTANCES
-                            .filterNot { url -> searchEngines.any { it.second == url } }
-                            .map { it to it }
-                        val labels = combined.map { it.first }.toTypedArray()
-                        AlertDialog.Builder(this)
-                            .setTitle("Select Search Engine")
-                            .setItems(labels) { _, i ->
-                                searxngBaseUrl = combined[i].second
-                                getSharedPreferences("m3u8vault_prefs", MODE_PRIVATE)
-                                    .edit().putString("default_search_url", searxngBaseUrl).apply()
-                                loadInCurrentTab(searxngBaseUrl)
-                            }.show()
-                    }
-                    10 -> showManualPasteDialog()
-                    11 -> {
-                        currentTab()?.let { t -> synchronized(t.streams) { t.streams.clear() } }
-                        updateBadge()
-                        Toast.makeText(this, "Stream list cleared", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }.show()
-    }
-
     private fun showManualPasteDialog() {
         val tab = currentTab() ?: return
         val pageUrl = tab.webView.url.orEmpty()
@@ -1128,7 +1753,7 @@ class BrowserActivity : AppCompatActivity() {
                         } else {
                             VaultEngine.enqueueDirectVideoDownload(this, name, url, null, headers)
                         }
-                        Toast.makeText(this, "Added to Vault Downloading", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Added to Vault", Toast.LENGTH_SHORT).show()
                     }.onFailure {
                         Toast.makeText(this, "Queue error: ${it.message}", Toast.LENGTH_LONG).show()
                     }
@@ -1136,53 +1761,6 @@ class BrowserActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
-    }
-
-    private fun openSmartDownloadPicker() {
-        if (isInspecting) return
-        val tab = currentTab() ?: return
-        val rawUrls = synchronized(tab.streams) { tab.streams.toList().reversed() }
-        if (rawUrls.isEmpty()) {
-            Toast.makeText(this, "No M3U8 streams detected yet. Play the video first.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val pageUrl = tab.webView.url.orEmpty()
-        val ua = runCatching { tab.webView.settings.userAgentString }.getOrDefault(BrowserHelper.MOBILE_UA)
-        val cookies = safeCookies(pageUrl)
-        val defaultTitle = tab.webView.title?.take(40)?.ifBlank { "HLS_Video" } ?: "HLS_Video"
-
-        isInspecting = true
-        updateBadge()
-
-        inspectExecutor.execute {
-            val options = mutableListOf<StreamOption>()
-            val seen = HashSet<String>()
-
-            for (rawUrl in rawUrls.take(8)) {
-                val parsed = inspectM3u8(rawUrl, pageUrl, ua, cookies)
-                for (opt in parsed) {
-                    if (seen.add(opt.url)) options.add(opt)
-                }
-            }
-
-            if (options.isEmpty()) {
-                rawUrls.forEachIndexed { idx, u ->
-                    val q = detectQualityFromUrl(u)
-                    val label = if (q != null) "$q • ${u.takeLast(28)}" else "Stream #${idx + 1} • ${u.takeLast(32)}"
-                    val h = q?.removeSuffix("p")?.toIntOrNull() ?: 0
-                    options.add(StreamOption(label, u, q.orEmpty(), h))
-                }
-            }
-
-            val sortedOptions = options.sortedByDescending { it.sortHeight }
-
-            runOnUiThread {
-                isInspecting = false
-                updateBadge()
-                showCatppuccinStreamBottomSheet(sortedOptions, defaultTitle, pageUrl, ua, cookies)
-            }
-        }
     }
 
     private fun showCatppuccinStreamBottomSheet(
@@ -1310,10 +1888,9 @@ class BrowserActivity : AppCompatActivity() {
                 row.addView(badge)
             }
 
-            val spacer = View(this).apply {
+            row.addView(View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-            }
-            row.addView(spacer)
+            })
 
             val dot = View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(dpInt(18f), dpInt(18f))
@@ -1329,11 +1906,10 @@ class BrowserActivity : AppCompatActivity() {
             listContainer.addView(row)
 
             if (index < options.lastIndex) {
-                val divider = View(this).apply {
+                listContainer.addView(View(this).apply {
                     layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1)
                     setBackgroundColor(Color.parseColor("#45475A"))
-                }
-                listContainer.addView(divider)
+                })
             }
         }
         updateRadioDots()
@@ -1346,6 +1922,7 @@ class BrowserActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#11111B"))
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
+            backgroundTintList = null
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#A6E3A1"))
                 cornerRadius = dp(24f)
@@ -1522,6 +2099,7 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        closePopupVideoPlayer()
         inspectExecutor.shutdownNow()
         translateExecutor.shutdownNow()
         tabs.forEach { it.webView.stopLoading(); it.webView.destroy() }
