@@ -6,7 +6,7 @@
     android:background="#1E1E2E"
     android:fitsSystemWindows="true">
 
-    <!-- Main Unlocked Vault Content -->
+    <!-- Unified Single-Section Vault Content -->
     <LinearLayout
         android:id="@+id/vaultMainLayout"
         android:layout_width="match_parent"
@@ -41,8 +41,8 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:paddingStart="6dp"
-                android:text="Private Vault"
+                android:paddingStart="4dp"
+                android:text="⚡ Vault"
                 android:textColor="#CDD6F4"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -74,7 +74,7 @@
                 android:minWidth="0dp"
                 android:minHeight="0dp"
                 android:padding="0dp"
-                android:text="🔒"
+                android:text="🔓"
                 android:textColor="#CBA6F7"
                 android:textSize="16sp" />
         </LinearLayout>
@@ -159,66 +159,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Videos / Downloading Tabs -->
-        <LinearLayout
-            android:id="@+id/vaultTabsBar"
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:background="#1E1E2E"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:id="@+id/tabVideos"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvTabVideos"
-                    android:layout_width="wrap_content"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:text="Videos"
-                    android:textColor="#CBA6F7"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <View
-                    android:id="@+id/indTabVideos"
-                    android:layout_width="match_parent"
-                    android:layout_height="2.5dp"
-                    android:background="#CBA6F7" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/tabDownloading"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvTabDownloading"
-                    android:layout_width="wrap_content"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:text="Downloading"
-                    android:textColor="#6C7086"
-                    android:textSize="14sp" />
-
-                <View
-                    android:id="@+id/indTabDownloading"
-                    android:layout_width="match_parent"
-                    android:layout_height="2.5dp"
-                    android:background="@android:color/transparent" />
-            </LinearLayout>
-        </LinearLayout>
-
         <!-- Empty State -->
         <TextView
             android:id="@+id/tvEmptyVault"
@@ -231,7 +171,7 @@
             android:textSize="14sp"
             android:visibility="gone" />
 
-        <!-- Live Vault Videos / Downloads List -->
+        <!-- Unified List: Active Downloads (when running) + Saved Videos -->
         <ListView
             android:id="@+id/vaultListView"
             android:layout_width="match_parent"
@@ -243,89 +183,94 @@
             android:padding="14dp" />
     </LinearLayout>
 
-    <!-- Catppuccin Mocha PIN Lock Screen Overlay -->
-    <LinearLayout
-        android:id="@+id/pinLockOverlay"
+    <!-- Scrollable Catppuccin Mocha Optional PIN Lock Overlay -->
+    <ScrollView
+        android:id="@+id/pinLockScroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#1E1E2E"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="24dp"
+        android:fillViewport="true"
         android:visibility="gone">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:text="🔒"
-            android:textColor="#CBA6F7"
-            android:textSize="38sp" />
-
-        <TextView
-            android:id="@+id/tvPinHeading"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:text="Vault Locked"
-            android:textColor="#CDD6F4"
-            android:textSize="22sp"
-            android:textStyle="bold" />
-
         <LinearLayout
-            android:id="@+id/pinDotsRow"
-            android:layout_width="wrap_content"
+            android:id="@+id/pinLockOverlay"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="28dp"
-            android:orientation="horizontal">
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="20dp">
 
-            <View
-                android:id="@+id/pinDot1"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginHorizontal="8dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="🔒"
+                android:textColor="#CBA6F7"
+                android:textSize="32sp" />
 
-            <View
-                android:id="@+id/pinDot2"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginHorizontal="8dp" />
+            <TextView
+                android:id="@+id/tvPinHeading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Vault Locked"
+                android:textColor="#CDD6F4"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
-            <View
-                android:id="@+id/pinDot3"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginHorizontal="8dp" />
+            <LinearLayout
+                android:id="@+id/pinDotsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:orientation="horizontal">
 
-            <View
-                android:id="@+id/pinDot4"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginHorizontal="8dp" />
+                <View
+                    android:id="@+id/pinDot1"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="8dp" />
+
+                <View
+                    android:id="@+id/pinDot2"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="8dp" />
+
+                <View
+                    android:id="@+id/pinDot3"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="8dp" />
+
+                <View
+                    android:id="@+id/pinDot4"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginHorizontal="8dp" />
+            </LinearLayout>
+
+            <GridLayout
+                android:id="@+id/pinKeypadGrid"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:columnCount="3"
+                android:rowCount="4" />
+
+            <Button
+                android:id="@+id/btnPinUnlock"
+                android:layout_width="210dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="16dp"
+                android:background="#CBA6F7"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="Unlock"
+                android:textAllCaps="false"
+                android:textColor="#11111B"
+                android:textSize="15sp"
+                android:textStyle="bold" />
         </LinearLayout>
-
-        <GridLayout
-            android:id="@+id/pinKeypadGrid"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:columnCount="3"
-            android:rowCount="4" />
-
-        <Button
-            android:id="@+id/btnPinUnlock"
-            android:layout_width="220dp"
-            android:layout_height="48dp"
-            android:layout_marginTop="24dp"
-            android:background="#CBA6F7"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="Unlock"
-            android:textAllCaps="false"
-            android:textColor="#11111B"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+    </ScrollView>
 
 </FrameLayout>
