@@ -27,10 +27,54 @@ object BrowserHelper {
         "rummycircle", "adnxs.com", "taboola.com", "outbrain.com", "mgid.com"
     )
 
+    private fun extractHost(url: String?): String {
+        if (url.isNullOrBlank()) return ""
+        return try {
+            Uri.parse(url).host?.lowercase()?.removePrefix("www.") ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun isSameSite(hostA: String, hostB: String): Boolean {
+        if (hostA.isBlank() || hostB.isBlank()) return true
+        return hostA == hostB || hostA.endsWith(".$hostB") || hostB.endsWith(".$hostA")
+    }
+
     fun isAdUrl(url: String, shieldEnabled: Boolean): Boolean {
         if (!shieldEnabled) return false
         val lower = url.lowercase()
         return blockedKeywords.any { lower.contains(it) }
+    }
+
+    fun shouldBlockRequest(
+        url: String,
+        shieldEnabled: Boolean,
+        currentPageUrl: String? = null,
+        blockThirdPartyScripts: Boolean = false,
+        headers: Map<String, String> = emptyMap()
+    ): Boolean {
+        if (!shieldEnabled) return false
+
+        val acceptHeader = headers["Accept"] ?: headers["accept"] ?: ""
+        if (isHlsStream(url, acceptHeader)) return false
+
+        if (isAdUrl(url, shieldEnabled)) return true
+
+        if (blockThirdPartyScripts) {
+            val reqHost = extractHost(url)
+            val pageHost = extractHost(currentPageUrl)
+            if (reqHost.isNotBlank() && pageHost.isNotBlank() && !isSameSite(reqHost, pageHost)) {
+                val lowerUrl = url.lowercase().substringBefore("?")
+                val secFetchDest = (headers["Sec-Fetch-Dest"] ?: headers["sec-fetch-dest"] ?: "").lowercase()
+                val isScriptOrFrame = secFetchDest in setOf("script", "iframe") ||
+                    acceptHeader.lowercase().contains("javascript") ||
+                    lowerUrl.endsWith(".js")
+                if (isScriptOrFrame) return true
+            }
+        }
+
+        return false
     }
 
     fun isHlsStream(url: String, acceptHeader: String = ""): Boolean {
@@ -58,26 +102,78 @@ object BrowserHelper {
         (function() {
             if (window.__vaultHooked) return;
             window.__vaultHooked = true;
-            const checkUrl = (u) => {
-                if (typeof u === 'string' && (u.includes('.m3u8') || u.includes('chunklist') || u.includes('master.txt'))) {
-                    VaultSniffer.onM3u8Detected(new URL(u, location.href).href);
+
+            let lastTapTime = 0;
+            const tapGraceMs = 1500;
+            const markTap = () => { lastTapTime = Date.now(); };
+            window.addEventListener('pointerdown', markTap, true);
+            window.addEventListener('touchstart', markTap, { capture: true, passive: true });
+            window.addEventListener('click', markTap, true);
+
+            const hasRecentTap = () => (Date.now() - lastTapTime) <= tapGraceMs;
+
+            const isOffOrigin = (rawUrl) => {
+                try {
+                    const resolved = new URL(rawUrl, location.href);
+                    if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return false;
+                    const a = location.hostname.replace(/^www\./, '');
+                    const b = resolved.hostname.replace(/^www\./, '');
+                    return a !== b && !b.endsWith('.' + a) && !a.endsWith('.' + b);
+                } catch (e) {
+                    return false;
                 }
             };
+
+            const checkUrl = (u) => {
+                if (typeof u === 'string' && (u.includes('.m3u8') || u.includes('chunklist') || u.includes('master.txt'))) {
+                    try {
+                        VaultSniffer.onM3u8Detected(new URL(u, location.href).href);
+                    } catch (e) {}
+                }
+            };
+
             const origFetch = window.fetch;
             window.fetch = function(...args) {
                 const target = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
                 checkUrl(target);
                 return origFetch.apply(this, args);
             };
+
             const origOpen = XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = function(method, url) {
                 checkUrl(url);
                 return origOpen.apply(this, arguments);
             };
+
+            const origAssign = Location.prototype.assign;
+            const origReplace = Location.prototype.replace;
+            Location.prototype.assign = function(url) {
+                if (!hasRecentTap() && isOffOrigin(url)) return;
+                return origAssign.call(this, url);
+            };
+            Location.prototype.replace = function(url) {
+                if (!hasRecentTap() && isOffOrigin(url)) return;
+                return origReplace.call(this, url);
+            };
+
+            const origPushState = History.prototype.pushState;
+            const origReplaceState = History.prototype.replaceState;
+            History.prototype.pushState = function(state, title, url) {
+                if (url && !hasRecentTap() && isOffOrigin(url)) return;
+                return origPushState.apply(this, arguments);
+            };
+            History.prototype.replaceState = function(state, title, url) {
+                if (url && !hasRecentTap() && isOffOrigin(url)) return;
+                return origReplaceState.apply(this, arguments);
+            };
+
             window.open = function(url) {
                 if (typeof url === 'string' && url.trim().length > 0 && !url.startsWith('javascript:')) {
                     try {
-                        VaultSniffer.onWindowOpen(new URL(url, location.href).href);
+                        const resolved = new URL(url, location.href).href;
+                        if (hasRecentTap() || !isOffOrigin(resolved)) {
+                            VaultSniffer.onWindowOpen(resolved);
+                        }
                     } catch (e) {}
                 }
                 return null;
