@@ -38,7 +38,7 @@ object BrowserHelper {
 
     fun isSameSite(hostA: String, hostB: String): Boolean {
         if (hostA.isBlank() || hostB.isBlank()) return true
-        return hostA == hostB || hostA.endsWith(".$hostB") \vert{}\vert{} hostB.endsWith(".$hostA")
+        return hostA == hostB || hostA.endsWith("." + hostB) || hostB.endsWith("." + hostA)
     }
 
     fun isAdUrl(url: String, shieldEnabled: Boolean): Boolean {
