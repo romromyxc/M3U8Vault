@@ -78,6 +78,7 @@ class BrowserActivity : AppCompatActivity() {
     private var activeTabIndex = 0
     private var isPageLoading = false
     private var adShieldEnabled = true
+    private var blockThirdPartyScripts = true
     private var desktopMode = false
     private var autoTranslateEnabled = false
     private var translateTargetLang = "en"
@@ -143,6 +144,7 @@ class BrowserActivity : AppCompatActivity() {
         autoTranslateEnabled = prefs.getBoolean("auto_translate_enabled", false)
         translateTargetLang = prefs.getString("translate_target_lang", "en") ?: "en"
         adShieldEnabled = prefs.getBoolean("ad_shield_enabled", true)
+        blockThirdPartyScripts = prefs.getBoolean("block_third_party_scripts", true)
         searxngBaseUrl = prefs.getString("default_search_url", "https://lite.duckduckgo.com/lite/")
             ?: "https://lite.duckduckgo.com/lite/"
 
@@ -564,7 +566,7 @@ class BrowserActivity : AppCompatActivity() {
         return result
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     private fun openNewTab(initialUrl: String? = searxngBaseUrl): BrowserTab {
         val wv = WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -589,6 +591,24 @@ class BrowserActivity : AppCompatActivity() {
         }
 
         val tab = BrowserTab(webView = wv)
+        var downX = 0f
+        var downY = 0f
+        var lastTapMs = 0L
+
+        wv.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (abs(event.rawX - downX) < dp(10f) && abs(event.rawY - downY) < dp(10f)) {
+                        lastTapMs = System.currentTimeMillis()
+                    }
+                }
+            }
+            false
+        }
 
         wv.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
             if (url.isBlank() || (!url.startsWith("http://") && !url.startsWith("https://"))) {
@@ -736,16 +756,38 @@ class BrowserActivity : AppCompatActivity() {
                 val url = request?.url?.toString().orEmpty()
                 if (url.isBlank()) return false
                 if (!url.startsWith("http://") && !url.startsWith("https://")) return true
+
                 if (BrowserHelper.isAdUrl(url, adShieldEnabled)) {
-                    runOnUiThread { Toast.makeText(this@BrowserActivity, "Blocked ad redirect", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread {
+                        Toast.makeText(this@BrowserActivity, "Blocked ad redirect", Toast.LENGTH_SHORT).show()
+                    }
                     return true
+                }
+
+                if (adShieldEnabled) {
+                    val currentUrl = view?.url.orEmpty().ifBlank { tab.lastUrl }
+                    val currentHost = BrowserHelper.extractHost(currentUrl)
+                    val targetHost = BrowserHelper.extractHost(url)
+                    val isOffOrigin = currentHost.isNotBlank() &&
+                        targetHost.isNotBlank() &&
+                        !BrowserHelper.isSameSite(currentHost, targetHost)
+                    val hasRecentTap = (System.currentTimeMillis() - lastTapMs) <= 1500L
+
+                    if (isOffOrigin && !hasRecentTap) {
+                        runOnUiThread {
+                            Toast.makeText(this@BrowserActivity, "Blocked scroll/auto redirect", Toast.LENGTH_SHORT).show()
+                        }
+                        return true
+                    }
                 }
                 return false
             }
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString().orEmpty()
-                val accept = request?.requestHeaders?.get("Accept").orEmpty()
+                val headers = request?.requestHeaders.orEmpty()
+                val accept = headers["Accept"] ?: headers["accept"] ?: ""
+
                 if (isDirectPlayableVideoUrl(url, accept)) {
                     synchronized(tab.streams) {
                         tab.streams.remove(url)
@@ -753,7 +795,16 @@ class BrowserActivity : AppCompatActivity() {
                     }
                     if (currentTab()?.id == tab.id) runOnUiThread { updateBadge() }
                 }
-                if (BrowserHelper.isAdUrl(url, adShieldEnabled)) return BrowserHelper.emptyResponse()
+
+                val blocked = BrowserHelper.shouldBlockRequest(
+                    url = url,
+                    shieldEnabled = adShieldEnabled,
+                    currentPageUrl = tab.lastUrl,
+                    blockThirdPartyScripts = blockThirdPartyScripts,
+                    headers = headers
+                )
+                if (blocked) return BrowserHelper.emptyResponse()
+
                 return super.shouldInterceptRequest(view, request)
             }
 
@@ -766,6 +817,7 @@ class BrowserActivity : AppCompatActivity() {
                     if (!url.isNullOrBlank() && !urlBar.hasFocus()) urlBar.setText(url)
                     syncNav()
                 }
+                view?.evaluateJavascript(BrowserHelper.HOOK_JS, null)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -1113,6 +1165,14 @@ class BrowserActivity : AppCompatActivity() {
         browserCard.addView(createRow("Ad & Popup Shield", rightView = swAdShield))
         addDivider(browserCard)
 
+        val swThirdPartyScripts = createMintSwitch(blockThirdPartyScripts) { enabled ->
+            blockThirdPartyScripts = enabled
+            prefs.edit().putBoolean("block_third_party_scripts", enabled).apply()
+            wv?.reload()
+        }
+        browserCard.addView(createRow("Block 3rd-Party Scripts", rightView = swThirdPartyScripts))
+        addDivider(browserCard)
+
         val currentEngineName = searchEngines.firstOrNull { it.second == searxngBaseUrl }?.first
             ?.substringBefore(" (") ?: searxngBaseUrl.removePrefix("https://").substringBefore("/")
         browserCard.addView(createRow("Search Engine", valueText = "$currentEngineName  ›") {
@@ -1308,7 +1368,6 @@ class BrowserActivity : AppCompatActivity() {
         closePopupVideoPlayer()
         if (options.isEmpty()) return
 
-        // Pause noisy webpage media in background so only the clean pop-up plays
         currentTab()?.webView?.evaluateJavascript(
             "document.querySelectorAll('video,audio').forEach(m => m.pause());",
             null
@@ -1361,7 +1420,6 @@ class BrowserActivity : AppCompatActivity() {
             }
         }
 
-        // Top Drag Handle + Controls
         val topHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1397,7 +1455,6 @@ class BrowserActivity : AppCompatActivity() {
             val decorView = window.decorView as FrameLayout
             (card.parent as? ViewGroup)?.removeView(card)
 
-            // Always reset drag offsets so card never gets stuck off-center
             card.translationX = 0f
             card.translationY = 0f
 
@@ -1472,7 +1529,6 @@ class BrowserActivity : AppCompatActivity() {
         card.addView(topHeader)
         card.addView(playerView)
 
-        // Bottom Controls Row: Speed | Quality | Save to Vault
         val bottomRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1574,7 +1630,6 @@ class BrowserActivity : AppCompatActivity() {
         bottomRow.addView(btnSaveVault)
         card.addView(bottomRow)
 
-        // Allow dragging the pop-up player cleanly using translationX/translationY
         var startRawX = 0f
         var startRawY = 0f
         var startTransX = 0f
