@@ -27,7 +27,7 @@ object BrowserHelper {
         "rummycircle", "adnxs.com", "taboola.com", "outbrain.com", "mgid.com"
     )
 
-    private fun extractHost(url: String?): String {
+    fun extractHost(url: String?): String {
         if (url.isNullOrBlank()) return ""
         return try {
             Uri.parse(url).host?.lowercase()?.removePrefix("www.") ?: ""
@@ -36,9 +36,9 @@ object BrowserHelper {
         }
     }
 
-    private fun isSameSite(hostA: String, hostB: String): Boolean {
+    fun isSameSite(hostA: String, hostB: String): Boolean {
         if (hostA.isBlank() || hostB.isBlank()) return true
-        return hostA == hostB || hostA.endsWith(".$hostB") || hostB.endsWith(".$hostA")
+        return hostA == hostB || hostA.endsWith(".$hostB") \vert{}\vert{} hostB.endsWith(".$hostA")
     }
 
     fun isAdUrl(url: String, shieldEnabled: Boolean): Boolean {
